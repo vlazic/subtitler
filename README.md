@@ -57,58 +57,84 @@ it, so nothing here is a prerequisite for anything else.
 ## The window, for people who do not use a terminal
 
 ```bash
-subtitler gui        # or: make gui
+subtitler install-app   # once: an icon in Applications, or in your app menu
+subtitler gui           # or: make gui
 ```
 
-That starts a small server on your own machine and opens your browser at it. Nothing is
-uploaded and nothing leaves the computer: the page is talking to a program running on it,
-and the address it opens (`http://127.0.0.1:...`) is not reachable from anywhere else.
-Leave the terminal window open while you use it, and press Ctrl-C when you are done.
+`install-app` is meant to be run once, by whoever sets the machine up. On macOS it writes
+`~/Applications/Subtitler.app`; on Linux it writes a `.desktop` entry and the icon theme
+files that go with it. After that the person using this never types anything: they
+double-click it and a window opens. That is the whole point, and it is why the interface is
+a desktop window rather than a browser page, which would still have to be started from a
+terminal.
 
-The page covers the whole job:
+Nothing is uploaded and nothing leaves the computer, in either interface.
 
-- **Pick a file** by browsing your own disk, starting from Desktop, Downloads and
-  Movies (Videos on Linux). It filters to audio and video, with a switch to show everything.
+**On macOS the first launch is refused.** The bundle is not signed by an identified
+developer, because signing needs an Apple Developer certificate, so you get *"Subtitler
+cannot be opened"*. Right-click (or Control-click) the icon, choose **Open**, and confirm.
+That is once, ever. `install-app` prints this rather than letting you discover it.
+
+The window covers the whole job:
+
+- **Pick a file** with the system file chooser, filtered to audio and video.
 - **Or paste a link**, with a start and stop time beside it. Same yt-dlp path the command
-  line uses. A link has no folder of its own to write beside, so the page asks for one
+  line uses. A link has no folder of its own to write beside, so the window asks for one
   before it will start; that is non-negotiable 4, said while the button is still unpressed.
 - **Choose what to make**: a video with the subtitles burned in plus the `.srt`/`.vtt`, or
   the subtitle files alone. Pick the look (outline, box, minimal) and where to save.
-- **Choose how to transcribe**: engine, model, CPU or GPU, language, and the denoise
-  preset. If the model has not been downloaded yet, the page says so and offers a button
-  that downloads it with a progress log, instead of telling you to run a command.
+- **Choose how to transcribe**: engine, model, CPU or GPU, language, the steering prompt
+  and the denoise preset.
 - **Shape the subtitles**: characters per line, lines per subtitle, shortest and longest
-  duration, reading speed. Everything else, including the steering prompt, the canvas, the
-  fonts, `--force` and the LLM correction pass, is under "Everything else".
-- **Watch it run.** The transcription happens on a worker, so the page stays responsive
-  through a 45-minute file. It shows which stage is running and streams the same log the
-  command line prints (including yt-dlp's download progress), then lists the files it wrote
-  with a button that opens the folder (Show in Finder on macOS).
+  duration, reading speed. The LLM correction pass has its own section with every `--fix`
+  option in it, and `--force`, the batch size and the canvas are under "Advanced".
+- **Watch it run.** The transcription happens on a worker thread, so the window stays
+  responsive through a 45-minute file. It shows which stage is running out of the stages
+  this particular run will actually go through, and streams the same log the command line
+  prints, including yt-dlp's download progress.
 - **Read the subtitles before the video is made.** On by default, and the section below is
   about what it does to the cache.
-- **Check my computer** runs the same checks as `subtitler doctor` and shows what is
-  missing along with the exact command to fix it. This is the point of the button: on macOS
-  `brew install ffmpeg` gives you an ffmpeg without libass, and burn-in silently cannot
-  work. The window tells you before you waste a transcription on it.
+- **Open what it made.** The Result tab lists every file the run wrote, labelled, and shows
+  any one of them in the file manager (Show in Finder on macOS) along with the equivalent
+  command line, which you can select and copy.
+- **This machine** runs the same checks as `subtitler doctor` and shows what is missing
+  along with the exact command to fix it. This is the point of the tab: on macOS `brew
+  install ffmpeg` gives you an ffmpeg without libass, and burn-in silently cannot work. The
+  window tells you before you waste a transcription on it. The same tab lists the speech
+  models, says which are already on this machine, and downloads one with a progress bar
+  measured against the bytes on disk, instead of telling you to run a command.
 
-Every screen prints the equivalent command line, so anything you set up by clicking can be
-repeated, scripted, or pasted into a bug report.
+There is nothing to install for either interface. Both are stdlib: the window is `tkinter`,
+which is compiled into the Python `make setup` installs through uv, and the browser page is
+`http.server` plus one HTML file. No packaging step, no bundled JavaScript, no compiled
+dependency, which is non-negotiable 6.
 
-There is nothing to install for it. The GUI is stdlib `http.server` and one HTML file, with
-no packaging step, no bundled JavaScript, and no compiled dependency, which is also why it
-is a browser page rather than a Tk window: whether `tkinter` exists at all depends on how
-your Python was built, and Homebrew's `python@3.12` does not ship it.
+### If your Python has no Tk
 
-`--port N` pins the port (the default picks a free one) and `--no-browser` just prints the
-address. Do not pass `--host` unless you mean it: the page can read and write files
-anywhere your user can, and binding to anything but loopback hands that to your network.
+`tkinter` is part of the *interpreter build*, not of this project, and there is no package
+that can add it: `_tkinter` is a C extension linked against the system Tcl/Tk. The
+interpreter uv installs bundles it and so does the python.org installer, so the setup this
+README documents has a window on macOS and Linux both. A Homebrew `python@3.12` does not
+(`brew install python-tk@3.12`), and a Debian or Ubuntu system Python does not
+(`sudo apt install python3-tk`).
+
+You do not have to fix it to keep working. `subtitler gui` on such a machine prints one
+sentence saying which interface opened and why, and serves the browser page instead; a
+machine with no display at all gets the same treatment. `subtitler gui --web` asks for the
+page deliberately, and `subtitler doctor` reports the toolkit as a warning rather than a
+failure, because nothing is actually broken without it.
+
+For the page: `--port N` pins the port (the default picks a free one) and `--no-browser`
+just prints the address. Do not pass `--host` unless you mean it: the page can read and
+write files anywhere your user can, and binding to anything but loopback hands that to your
+network.
 
 ## Checking the subtitles before the video is made
 
 Recognition gets names, foreign words and proper nouns wrong, and the only way to know is
 to read them. With **"Let me read and correct the subtitles before the video is made"**
 ticked (it is by default), the run stops as soon as the cues exist, before anything is
-encoded, and the page turns into an editor:
+encoded, and the window turns into an editor:
 
 - every cue with its **start, end and duration**, because "too fast to read" is not a
   judgement anyone can make from a character count;
@@ -121,9 +147,10 @@ encoded, and the page turns into an editor:
   would use. Long line, too short, too long, too fast. Markup (`<b>`, `<i>`) is not
   counted, because a player renders it as weight and not as width.
 
-Nothing is re-checked in the browser: the page sends the text back and the server answers
-with `cues.wrap_edited` and `cues.lint_cues`, the same two functions the burn and the
-`lint` command use. A second implementation in JavaScript would be a second set of rules
+Nothing is re-checked by the front end: an edited cue goes back through
+`cues.wrap_edited` and `cues.lint_cues`, the same two functions the burn and the `lint`
+command use, and both interfaces share the one editor model in `gui/session.py`. A second
+implementation in JavaScript, or a second one in the window, would be a second set of rules
 about Serbian clitics, kept in sync by hope.
 
 Then **"Looks right, make the video"** burns it. On the command line the same stop is
@@ -186,7 +213,8 @@ Deleting the file is the supported way to say "run without them".
 ## Usage
 
 ```bash
-subtitler gui                                 # the browser interface (see above)
+subtitler install-app                         # a double-clickable icon (see above)
+subtitler gui                                 # the desktop window (--web for the browser one)
 subtitler run INPUT.mp4                       # transcribe, shape cues, burn in
 subtitler run INPUT.m4a --canvas 1920x1080    # audio-only input gets a video canvas
 subtitler run INPUT.mp4 --srt-only            # sidecar files, no video work
@@ -617,9 +645,13 @@ does batch 32: 6% faster than 16 and 22.5 GB of VRAM against under 16.
 | Pop!_OS 22.04, RTX 3090 | the `--fix` axis, 12 cells | `openai/gpt-4o` rewrote 2.0% to 15.4% of the words, depending on the clip |
 | Pop!_OS 22.04 | `subtitler bench report` | recomputed every metric from the kept transcripts, no model reloaded |
 | Any | WER, CER, WER_folded on real clips | not verified: no reference transcript exists yet. The code path is unit-tested, nothing more |
-| Pop!_OS 22.04, Chrome | `subtitler gui` | picked a file, set the options and started a run from the page; 109s of Serbian burned in, 21 cues, 12s |
-| ubuntu-latest CI | `subtitler gui` | binds, serves the page, refuses an untokened call, reports dependencies, completes a faster-whisper run through the API, headless |
-| macOS 14 Apple Silicon CI | `subtitler gui` | the same, reporting `Darwin arm64 brew:/opt/homebrew` and `Show in Finder`, transcribing on mlx |
+| Pop!_OS 22.04, Tk 8.6.14 | `subtitler gui`, the native window | opened, set the controls, ran `fixtures/gozba-sample.mp3` on faster-whisper large-v3 with `--device cuda`: 20 cues, none flagged, corrected cue 1 in the editor, approved, and got the `.srt`, `.vtt` and `.subbed.mp4` with the correction in them |
+| Pop!_OS 22.04 | the window's This machine tab | the same report `subtitler doctor` prints, live, with the model list showing large-v3 and tiny already on disk |
+| Pop!_OS 22.04 | `subtitler install-app` | wrote the `.desktop` entry and the icon theme PNGs; `WM_CLASS` is `"subtitler", "Subtitler"`, which is what `StartupWMClass` matches |
+| Any Mac | `Subtitler.app` | not verified on hardware. The bundle's structure, plist and script are asserted byte by byte in `tests/test_launcher.py` against a faked `Platform`; nothing has double-clicked it |
+| Pop!_OS 22.04, Chrome | `subtitler gui --web` | picked a file, set the options and started a run from the page; 109s of Serbian burned in, 21 cues, 12s |
+| ubuntu-latest CI | `subtitler gui --web` | binds, serves the page, refuses an untokened call, reports dependencies, completes a faster-whisper run through the API, headless |
+| macOS 14 Apple Silicon CI | `subtitler gui --web` | the same, reporting `Darwin arm64 brew:/opt/homebrew` and `Show in Finder`, transcribing on mlx |
 | Any Mac | `subtitler gui` reveal in Finder | not verified on hardware: `open -R` is covered by a test with a faked `Platform`, never by a Mac |
 | Pop!_OS 22.04, RTX 3090 | `run URL --start 1:00 --end 1:45` | 23.3s cold, end to end: 20.3 MB fetched, cut, transcribed, burned. Measured when the whole 229s source was downloaded and cut here; the window now goes to yt-dlp, so the transfer is smaller and the local cut is gone. See the note below |
 | Pop!_OS 22.04, RTX 3090 | the same command again | 0.36s, every stage cached, no network |

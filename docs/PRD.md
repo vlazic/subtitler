@@ -29,9 +29,18 @@ Languages other than Serbian as a *tuned* target: others work, they are just not
 
 **A GUI was a non-goal and is no longer one** (amended 2026-08-04). The primary user story
 is a friend who will not open a terminal, and a CLI does not serve that person however good
-it is. It earns its place on three conditions, all currently met: it adds no dependency (it
-is `http.server` plus one HTML file), it is a thin shell over the same pipeline rather than
-a second code path, and it is covered by tests. If any of those stops being true, it goes.
+it is. It earns its place on three conditions, all currently met: it adds no dependency, it
+is a thin shell over the same pipeline rather than a second code path, and it is covered by
+tests. If any of those stops being true, it goes.
+
+**The GUI is a desktop window, with the browser page as its fallback** (amended
+2026-08-04). "Will not open a terminal" is not satisfied by an interface that has to be
+started from one, so `subtitler install-app` writes a `.app` bundle on macOS and a
+`.desktop` entry on Linux, and the icon opens a real window. Both front ends are stdlib:
+tkinter is compiled into the interpreter uv installs, and `http.server` is in every build,
+so neither adds a package and non-negotiable 6 holds. `subtitler gui` opens the window,
+`--web` asks for the page, and an interpreter built without Tk gets the page automatically
+with one sentence saying why.
 
 ## 4. Product surface
 
@@ -44,7 +53,8 @@ a second code path, and it is covered by tests. If any of those stops being true
 | `subtitler lint SUBS` | cue-quality violations, exit 1 if any |
 | `subtitler convert IN -o OUT` | verbose_json, srt, and vtt in any direction |
 | `subtitler bench run/report/agents` | engine x denoiser quality matrix |
-| `subtitler gui` | browser interface over the same pipeline, for non-terminal users |
+| `subtitler gui [--web]` | the desktop window over the same pipeline, for non-terminal users; `--web` serves the browser page instead |
+| `subtitler install-app` | a double-clickable icon: `~/Applications/Subtitler.app` or a `.desktop` entry |
 
 ## 5. Acceptance criteria
 

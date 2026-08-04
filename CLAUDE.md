@@ -51,7 +51,9 @@ primary target**, Linux is the development platform.
 | `subtitler/postedit.py` | optional LiteLLM correction pass |
 | `subtitler/edits.py` | hand corrections from the GUI editor: the artifact, and the `edit` stage |
 | `subtitler/doctor.py` | dependency detection and install |
-| `subtitler/gui/` | the browser UI: `forms` (pure), `files`, `jobs`, `app`, `server` |
+| `subtitler/gui/` | both UIs: `forms` (pure), `files`, `jobs`, `session` shared; `window` native, `app`+`server`+`static` browser |
+| `subtitler/launcher.py` | `install-app`: the `.app` bundle and the `.desktop` entry |
+| `subtitler/icon.py` | the icon, drawn and encoded as PNG and ICNS in pure Python |
 | `subtitler/bench/` | benchmark matrix, Serbian normalization, metrics, report, reference adjudication |
 
 ## Gotchas that cost time before
@@ -114,13 +116,29 @@ primary target**, Linux is the development platform.
   artifact. They live in `edits.json`, read as the input of the `edit` stage, which records
   the cues key they were made against so a moved transcript reports and skips them instead
   of re-pointing them at whatever now holds that index. See `subtitler/edits.py`.
-- **The GUI is a local web page, not tkinter, and non-negotiable 6 is why.** Tk is a
-  property of the *interpreter build*: python.org and uv-managed builds ship it, Homebrew's
-  `python@3.12` does not pull `python-tk`, and the failure is an `ImportError` about
-  `_tkinter` in front of the least technical user this project has. Neither CI runner has a
-  display and macOS has no Xvfb, so a Tk window could not be exercised on the primary
-  target at all. `http.server` plus `webbrowser` is in every build and every route is
-  driven by real HTTP on both runners.
+- **There are two GUIs: the native window is the default and the browser page is the
+  fallback.** `cli._cmd_gui` picks. The original reasoning rejected tkinter outright and was
+  half right: Tk is a property of the *interpreter build*, and Homebrew's `python@3.12`
+  really does not pull `python-tk@3.12`. But `.python-version` pins 3.12 and `make setup`
+  goes through uv, whose python-build-standalone interpreters bundle Tk 8.6 on macOS and
+  Linux both, so the documented setup has a window everywhere, and the browser page's own
+  failure is unfixable by any argument about imports: the friend still has to open a
+  terminal and type `subtitler gui`, which is the thing a GUI exists to spare them.
+  `install-app` gives them an icon, and an icon has to open a window. What is left for the
+  browser page is a Python obtained some other way and a machine with no display, and it
+  keeps working for both. **Do not try to add a toolkit as a dependency**: `_tkinter` is
+  compiled into the interpreter and has no PyPI package, and PySide6, wxPython and
+  pywebview are all compiled wheels, which non-negotiable 6 forbids.
+- **`doctor`'s `tkinter` check is a warning and must never become a failure.** A machine
+  without Tk still gets a working GUI, so nothing is broken; turning it red would send
+  someone to `--install` over a downgrade. It names the per-platform formula because
+  `ImportError: No module named '_tkinter'` names nothing anybody can act on.
+- **Neither CI runner has a display and macOS has no Xvfb**, so `window.py` contains layout
+  and event bindings and nothing else: every decision it makes is a call into
+  `gui/session.py`, which `tests/test_desktop.py` drives with no display at all. The one
+  thing a headless test cannot check is that the widgets built match the options the form
+  accepts, so `window.CONTROLS` is declared, tested against `forms`, and asserted against
+  the real widgets in `Window.__init__`.
 - **`--device cuda` used to skip the CUDA preload.** `resolve_device()` reaches
   `preload_cuda_libraries()` only through `_cuda_usable()`, which it consults on `auto`
   alone, so asking for cuda by name handed CTranslate2 an unprepared loader and died with

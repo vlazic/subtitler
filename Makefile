@@ -1,4 +1,4 @@
-.PHONY: help setup setup-mac setup-linux install-deps models run gui test lint fmt bench bench-report clean
+.PHONY: help setup setup-mac setup-linux install-deps models run gui install-app test lint fmt bench bench-report clean
 
 IN ?=
 RUN ?=
@@ -9,7 +9,8 @@ help:
 	@echo "  install-deps  subtitler doctor --install  (brew on macOS, apt on Debian/Ubuntu)"
 	@echo "  models        download the default local model"
 	@echo "  run IN=file   subtitler run <file>"
-	@echo "  gui           subtitler gui  (opens the browser interface)"
+	@echo "  gui           subtitler gui  (the desktop window; --web for the browser one)"
+	@echo "  install-app   an icon in Applications (macOS) or the app menu (Linux)"
 	@echo "  test          pytest"
 	@echo "  lint / fmt    ruff check / ruff format"
 	@echo "  bench         subtitler bench run"
@@ -42,10 +43,14 @@ run:
 	@test -n "$(IN)" || (echo "usage: make run IN=path/to/file" && exit 1)
 	uv run subtitler run "$(IN)"
 
-# No extra sync: the GUI is stdlib http.server plus one HTML file, so `make setup` has
-# already installed everything it needs.
+# No extra sync: the window is stdlib tkinter and the browser fallback is stdlib
+# http.server plus one HTML file, so `make setup` has already installed everything either
+# of them needs. uv's own interpreters bundle Tk, which is why this works out of the box.
 gui:
 	uv run subtitler gui
+
+install-app:
+	uv run subtitler install-app
 
 test:
 	uv run pytest
