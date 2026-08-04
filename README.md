@@ -167,6 +167,22 @@ the editor on the new transcript and correcting it there is the way forward.
 A run where nobody has ever opened the editor writes no `edit` stage at all and has exactly
 the cache keys it had before this existed.
 
+It is also the one file here you are invited to open in a text editor, so a fault in it is
+**reported rather than swallowed**. A trailing comma, a `schema_version` from another
+release, or `"edit"` typed for `"edits"` stops the run and names the line:
+
+```
+error: .../edits.json is not valid JSON: Expecting property name enclosed in double quotes
+at line 4, column 3. Fix it, or delete edits.json to run without the hand corrections;
+reopening the editor writes a fresh one.
+```
+
+Stopping is the deliberate choice. Reading a malformed file as "no corrections" is what it
+used to do, and that produced a run that reported success and burned the uncorrected words
+into a video without a word about it. Hand-typed text is not reconstructible; everything
+above this stage is cached, so the cost of stopping is one edit and a re-run of seconds.
+Deleting the file is the supported way to say "run without them".
+
 ## Usage
 
 ```bash
@@ -243,6 +259,14 @@ Two things this gets right on purpose:
 - **The burn uses the fragment**, so the exported video is three minutes long. Burning onto
   the original would give you the full-length source carrying subtitles that match three
   minutes of it.
+- **On a URL, the span is what gets downloaded.** `--start`/`--end` are handed to yt-dlp,
+  which seeks the remote file, so keeping a minute out of a four-hour lecture transfers
+  about a minute. There is no local cut afterwards: what landed already begins where you
+  asked. The consequence is that moving `--start` re-downloads the new window rather than
+  re-cutting a copy of the whole source, because there is no copy of the whole source.
+
+A live stream is refused unless `--end` bounds it, for the reason a live stream is a
+problem: it has no end, so neither would the download.
 
 The cut is a stream copy, so it costs about a second rather than a re-encode. The price of
 that is the one every stream copy pays: video can only be cut at a keyframe, so the
@@ -294,7 +318,8 @@ The keys chain, so changing one thing re-does only what depends on it:
 | `--fix-model` or an edit to the prompt file | the correction pass, then the burn |
 | a correction typed in the editor | the burn (and the soft-muxed track), nothing above it |
 | a different `--model` or device | transcribe onwards |
-| `--start` or `--end` | the cut, then everything after it. **Not the download** |
+| `--start` or `--end` on a file | the cut, then everything after it |
+| `--start` or `--end` on a URL | the download, which *is* the window, then everything after |
 | `--srt-only` on a URL that was fetched as video | the download, as audio this time |
 | the input file's bytes | everything |
 
@@ -305,10 +330,11 @@ Stages, in the order `--force` treats as "and everything after": `fetch`, `trim`
 stage and everything after it. Deleting the `.subtitler` directory is always safe.
 
 A download is the one stage that cannot be content-addressed, because there is nothing to
-hash until it has happened. Its key is the URL plus which shape was asked for, and nothing
-about the remote file: checking whether an upload changed would cost a network round trip
-on every warm run, and a warm run is meant to be free and offline. So if the uploader
-replaces the video behind a URL that did not change, `--force fetch` is how you say so.
+hash until it has happened. Its key is the URL, which shape was asked for and which span,
+and nothing about the remote file: checking whether an upload changed would cost a network
+round trip on every warm run, and a warm run is meant to be free and offline. So if the
+uploader replaces the video behind a URL that did not change, `--force fetch` is how you
+say so.
 
 Large inputs are fingerprinted by sampling (length, plus the first, middle and last
 megabyte) rather than by hashing in full, because reading 3 GB to decide whether to skip
@@ -595,16 +621,19 @@ does batch 32: 6% faster than 16 and 22.5 GB of VRAM against under 16.
 | ubuntu-latest CI | `subtitler gui` | binds, serves the page, refuses an untokened call, reports dependencies, completes a faster-whisper run through the API, headless |
 | macOS 14 Apple Silicon CI | `subtitler gui` | the same, reporting `Darwin arm64 brew:/opt/homebrew` and `Show in Finder`, transcribing on mlx |
 | Any Mac | `subtitler gui` reveal in Finder | not verified on hardware: `open -R` is covered by a test with a faked `Platform`, never by a Mac |
-| Pop!_OS 22.04, RTX 3090 | `run URL --start 1:00 --end 1:45` | 23.3s cold, end to end: 20.3 MB fetched, cut, transcribed, burned. See the note below |
+| Pop!_OS 22.04, RTX 3090 | `run URL --start 1:00 --end 1:45` | 23.3s cold, end to end: 20.3 MB fetched, cut, transcribed, burned. Measured when the whole 229s source was downloaded and cut here; the window now goes to yt-dlp, so the transfer is smaller and the local cut is gone. See the note below |
 | Pop!_OS 22.04, RTX 3090 | the same command again | 0.36s, every stage cached, no network |
-| Pop!_OS 22.04, RTX 3090 | the same with `--start 1:10` | 17.6s, `fetch: cached`. Moving the window re-cuts, it does not re-download |
+| Pop!_OS 22.04, RTX 3090 | the same with `--start 1:10` | 17.6s, `fetch: cached`, re-cut locally. **Superseded**: moving the window now re-fetches the new window. Not re-verified on hardware, and the constructed yt-dlp options are asserted in `tests/test_fetch.py` instead |
 | Pop!_OS 22.04, RTX 3090 | the same with `--srt-only` | fetched 3.7 MB of audio instead of 20.3 MB of video |
 | Pop!_OS 22.04, ffmpeg 4.4.2 | `run FILE --start 0:20 --end 0:50` | 30.0s of the Serbian fixture, burned output exactly 30.0s |
+| Pop!_OS 22.04, ffmpeg 4.4.2 | `run FILE --start 5:00` on the 109s fixture | before: ffmpeg exited 0 writing a 349-byte husk, the run died in an ffprobe dump, and every re-run printed `trim: cached` and died identically. After: `--start 00:05:00.000 is at or past the end of gozba-sample.mp3, which is 00:01:49.061 long`, and the poisoned work directory re-cut a valid window on the next command |
 | Pop!_OS 22.04, no `--extra fetch` | a URL run | `error: downloading a URL needs yt-dlp. fix: uv sync --extra fetch`, and the whole suite still passes |
 | Pop!_OS 22.04 | yt-dlp failure messages | unavailable, 404, and a dead DNS resolver each produce one sentence, verified against real yt-dlp output |
 | Pop!_OS 22.04, Chrome | the cue editor, end to end | picked the Serbian fixture in the page, landed in the editor after 8s, corrected two cues, heard cue 2 through the Listen button (a `206` off `/api/media`), approved, and read the corrected text off a frame pulled out of the burned mp4 |
 | Pop!_OS 22.04, Chrome | the live quality check | a deliberately unreadable correction was marked `3 lines (max 2)` and `28.9 chars/sec exceeds 20.0` as it was typed, and libass rendered exactly the three lines the wrapper chose |
 | Pop!_OS 22.04, RTX 3090 | corrections against the stage cache | survived a `--force cues`, left the burn cached on a second approval, re-burned when the text changed, and were reported and skipped after `--denoise afftdn` moved the transcript |
+| Pop!_OS 22.04 | a malformed `edits.json` | before: invalid JSON, a wrong `schema_version` and `"edit"` typed for `"edits"` each produced zero log lines, uncorrected text and a run that reported success. After: each names the fault and the position and stops |
+| Pop!_OS 22.04 | `GET /api/media` on a 300 MB file, no Range header | peak RSS 328 MB before, 35 MB after (35 MB idle baseline), measured with `ru_maxrss` over a real loopback socket. A malformed Range is the same 200 and the same 35 MB; `bytes=99999999-` is now a 416 carrying `Content-Range: bytes */314572800` instead of the whole file |
 | Pop!_OS 22.04, ffmpeg 4.4.2 | `--soft-mux` | `ffprobe` reports stream 2 as `mov_text` tagged `language=srp`, and extracting it back out returns the corrected text |
 | Pop!_OS 22.04, Chrome | a link and a trim window from the page | pasted a YouTube URL with 0:05 to 0:20, watched yt-dlp's progress in the log, landed in the editor with 4 cues starting at `00:00.000`, approved, burned |
 

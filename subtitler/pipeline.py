@@ -229,14 +229,19 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
     )
 
     if cfg.url:
-        src, media_id, stem, label = _fetch(cfg, cache, work, log)
+        # A URL run asks the site for the window, so what lands is already the fragment and
+        # the `trim` stage has nothing left to cut. See `_fetch`.
+        src, media_id, stem, label = _fetch(cfg, cache, work, log, start=start_s, end=end_s)
+        already_cut = True
     else:
         src = cfg.input.expanduser().resolve()  # type: ignore[union-attr]
         media_id = cache_mod.content_id(src) if cache.enabled else "dry-run"
         stem, label = src.stem, src.name
+        already_cut = False
 
     if start_s or end_s is not None:
-        src, media_id = _trim(cfg, cache, src, media_id, work, start_s, end_s, log)
+        if not already_cut:
+            src, media_id = _trim(cfg, cache, src, media_id, work, start_s, end_s, log)
         label = f"{label} [{media.format_timecode(start_s)} to " + (
             f"{media.format_timecode(end_s)}]" if end_s is not None else "the end]"
         )
@@ -359,14 +364,23 @@ def _fetch(
     cache: cache_mod.StageCache,
     work: Path,
     log: Any,
+    *,
+    start: float = 0.0,
+    end: float | None = None,
 ) -> tuple[Path, str, str, str]:
     """Download the URL into the work directory. Returns (media, key, stem, label).
 
-    The stage's key is the URL plus which shape was asked for, and nothing else: there is
+    The stage's key is the URL, which shape was asked for, and **the window**: there is
     nothing to content-address before the download has happened, and asking the site
-    whether the upload changed would put a network round trip on every warm run. So
-    changing `--start`, the engine or the style re-uses the download, and `--force fetch`
-    is how you say "the upstream video changed".
+    whether the upload changed would put a network round trip on every warm run, so
+    `--force fetch` is how you say "the upstream video changed".
+
+    The window is in that key because the window is now part of what gets downloaded. This
+    stage used to fetch the whole source and let `trim` cut it, which meant a sixty-second
+    excerpt of a four-hour lecture transferred four hours; asking the site for the span
+    instead is defect-for-defect the same tradeoff as asking it for audio on `--srt-only`.
+    The consequence, stated plainly: moving `--start` re-downloads. It re-downloads the new
+    window, which is the thing the user asked to look at, and not the source it came from.
 
     The downloaded file's extension is not fixed in advance (it is whatever the site
     serves), so the cached record `fetch.json` is consulted first and names the artifact
@@ -391,15 +405,21 @@ def _fetch(
     entry = cache.begin(
         "fetch",
         input_hash=fetch_mod.url_id(cfg.url),
-        params=fetch_mod.cache_params(kind),
+        params=fetch_mod.cache_params(kind, start=start, end=end),
         artifacts=(info_path, known.path) if known else (info_path,),
     )
     if entry.hit and known is not None:
         log(f"fetch: cached ({known.path.name}, {known.title or known.id})")
         return known.path, entry.key, known.stem, known.title or known.path.name
 
-    log(f"fetching {cfg.url} ({kind})")
-    fetched = fetch_mod.fetch(cfg.url, work, kind=kind, progress=log)
+    if start or end is not None:
+        window = f"{media.format_timecode(start)} to " + (
+            media.format_timecode(end) if end is not None else "the end"
+        )
+        log(f"fetching {cfg.url} ({kind}, only {window})")
+    else:
+        log(f"fetching {cfg.url} ({kind})")
+    fetched = fetch_mod.fetch(cfg.url, work, kind=kind, progress=log, start=start, end=end)
     fetch_mod.write_info(info_path, fetched)
     cache.commit(entry)
     log(f"fetched: {fetched.title or fetched.id} -> {fetched.path.name}")
@@ -423,6 +443,14 @@ def _trim(
     relative to it with no offset arithmetic anywhere, and the burn re-encodes three
     minutes rather than an hour. Doing it at the end would need every one of those to know
     about a window, and the first thing to get it wrong would be silent.
+
+    **ffmpeg's exit code is not evidence that a fragment exists.** A `--start` past the end
+    of the source makes it write a few hundred bytes of container header, no audio at all,
+    and exit 0. Committing that to the cache turned one bad timecode into a work directory
+    that reported `trim: cached` and died in ffprobe on every subsequent run, forever. So
+    the start is checked against the source's real duration first, the cut result is probed
+    before the stage is committed, and a cached fragment that no longer probes is re-cut
+    rather than served.
     """
     dst = work / f"trim{src.suffix or '.mp4'}"
     window = f"{media.format_timecode(start)} to " + (
@@ -437,13 +465,44 @@ def _trim(
         artifacts=(dst,),
     )
     if entry.hit:
-        log(f"trim: cached ({window})")
-        return dst, entry.key
+        if _probes_clean(dst):
+            log(f"trim: cached ({window})")
+            return dst, entry.key
+        # A husk committed by a version that trusted ffmpeg's exit code. Recorded as the
+        # miss it is, so the run summary does not claim a stage it is about to redo.
+        cache.hits.remove(entry.name)
+        cache.misses.append(entry.name)
+        log(f"trim: the cached fragment for {window} is unreadable; cutting it again")
+
+    if not cfg.dry_run:
+        duration = media.probe(src).duration
+        if start >= duration:
+            raise media.MediaError(
+                f"--start {media.format_timecode(start)} is at or past the end of "
+                f"{src.name}, which is {media.format_timecode(duration)} long. "
+                "There would be nothing left to transcribe."
+            )
 
     media.trim(src, dst, start=start, end=end, dry_run=cfg.dry_run)
+    if not cfg.dry_run and not _probes_clean(dst):
+        size = dst.stat().st_size if dst.exists() else 0
+        raise media.MediaError(
+            f"the cut to {window} produced {dst.name} ({size} bytes), which ffprobe cannot "
+            "read as media. The trim has NOT been cached, so fixing the window and running "
+            "again re-cuts rather than serving this file."
+        )
     cache.commit(entry)
     log(f"trimmed: {window} (stream copy)")
     return dst, entry.key
+
+
+def _probes_clean(fragment: Path) -> bool:
+    """Whether `fragment` is media ffprobe can read. See `_trim` for why this is asked."""
+    try:
+        media.probe(fragment)
+    except (media.MediaError, ValueError):
+        return False
+    return True
 
 
 def _audio(
@@ -610,11 +669,21 @@ def _edit(
     A correction set recorded against a different transcript is reported and skipped, never
     re-pointed and never deleted: cue 41 of the old transcript is not cue 41 of the new one,
     and going back to the old model must make them line up again.
+
+    A file that cannot be read at all is a different case and stops the run. Reading it as
+    "no corrections" is what let a typo produce a run that reported success and burned the
+    uncorrected words with nothing said; see `edits.load`.
     """
     if not cache.enabled:
         return cues, cues_key, None
 
-    saved = edits_mod.load(cache.work)
+    try:
+        saved = edits_mod.load(cache.work)
+    except edits_mod.EditFileError as exc:
+        # On the same channel as the stale-key report below, because a GUI run shows the
+        # user this log and not the traceback the CLI prints.
+        log(f"edit: {exc}")
+        raise
     if saved is None or not saved:
         return cues, cues_key, None
 

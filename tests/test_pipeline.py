@@ -461,6 +461,52 @@ class TestTrimStage:
             run_pipeline(cfg(tmp_path, start="ten past"), log=lambda _m: None)
         assert not (tmp_path / ".subtitler").exists()
 
+    def test_a_start_past_the_end_says_how_long_the_source_is(self, tmp_path, fakes):
+        """Regression: `--start` past the end of the source made ffmpeg write a few hundred
+        bytes of container header and exit 0, and the failure surfaced as a raw ffprobe dump
+        from the next stage. The duration is the one fact that makes the timecode obviously
+        wrong, so it is in the message."""
+        engine, _ = fakes
+        with pytest.raises(pipeline.media.MediaError) as caught:
+            run_pipeline(cfg(tmp_path, start="30"), log=lambda _m: None)
+        message = str(caught.value)
+        assert "at or past the end" in message
+        assert media.format_timecode(media.probe(FIXTURE).duration) in message
+        assert engine.calls == 0
+
+    def test_a_fragment_that_does_not_probe_is_never_committed(self, tmp_path, fakes, monkeypatch):
+        """Regression: the `trim` stage committed on ffmpeg's exit code alone, so one bad
+        window turned a work directory into one that printed `trim: cached` and died in
+        ffprobe on every run afterwards, forever.
+
+        The husk is written here the way ffmpeg wrote it: file present, exit code 0.
+        """
+
+        def husk(src, dst, *, start=0.0, end=None, dry_run=False):
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(b"\xff\xfb" + b"\x00" * 347)
+            return dst
+
+        monkeypatch.setattr(pipeline.media, "trim", husk)
+        with pytest.raises(pipeline.media.MediaError, match="ffprobe cannot"):
+            run_pipeline(cfg(tmp_path, start="2", end="5"), log=lambda _m: None)
+        work = tmp_path / ".subtitler" / "tiny-10s"
+        assert (work / "trim.wav").exists()
+        assert not (work / "trim.meta.json").exists()
+
+    def test_a_cache_poisoned_by_the_old_behaviour_recovers(self, tmp_path, fakes):
+        """The other half: a work directory that already holds a committed husk, written by
+        a version that trusted the exit code. It must be re-cut, not served."""
+        run_pipeline(cfg(tmp_path, start="2", end="5"), log=lambda _m: None)
+        work = tmp_path / ".subtitler" / "tiny-10s"
+        assert (work / "trim.meta.json").exists()
+        (work / "trim.wav").write_bytes(b"\xff\xfb" + b"\x00" * 347)  # poison, meta intact
+
+        lines: list[str] = []
+        run_pipeline(cfg(tmp_path, start="2", end="5"), log=lines.append)
+        assert any("unreadable" in line for line in lines)
+        assert _duration(work / "trim.wav") == pytest.approx(3.0, abs=0.3)
+
 
 def _duration(path: Path) -> float:
     return pipeline.media.probe(path).duration
@@ -470,24 +516,43 @@ class FakeFetcher:
     """Stands in for yt-dlp. Copies the fixture in rather than downloading one.
 
     CI never touches YouTube: a test that downloads is flaky, rate-limited and slow. What
-    is verified here is the wiring around the download (the key, the shape asked for, where
-    it lands), and the real thing is verified by hand and recorded in the README.
+    is verified here is the wiring around the download (the key, the shape asked for, the
+    span asked for, where it lands), and the real thing is verified by hand and recorded in
+    the README.
+
+    A windowed call cuts the fixture, because that is what the real one now does: yt-dlp is
+    handed a `Section` and its ffmpeg downloader seeks the remote file, so what lands on
+    disk is already the fragment and the `trim` stage has nothing to do.
     """
 
     def __init__(self):
         self.calls: list[str] = []
+        self.windows: list[tuple[float, float | None]] = []
 
-    def __call__(self, url, dst_dir, *, kind="video", progress=None):
+    def __call__(self, url, dst_dir, *, kind="video", progress=None, start=0.0, end=None):
         from subtitler.fetch import Fetched
 
         self.calls.append(kind)
+        self.windows.append((start, end))
         dst_dir = Path(dst_dir)
         dst_dir.mkdir(parents=True, exist_ok=True)
         path = dst_dir / "fetch.wav"
-        path.write_bytes(FIXTURE.read_bytes())
+        windowed = bool(start) or end is not None
+        if windowed:
+            media.trim(FIXTURE, path, start=start, end=end)
+        else:
+            path.write_bytes(FIXTURE.read_bytes())
         if progress:
             progress("fetching: 100%")
-        return Fetched(path=path, url=url, id="vid123", title="Neki Naslov", kind=kind)
+        return Fetched(
+            path=path,
+            url=url,
+            id="vid123",
+            title="Neki Naslov",
+            kind=kind,
+            section_start=start if windowed else None,
+            section_end=end,
+        )
 
 
 @pytest.fixture
@@ -528,11 +593,32 @@ class TestFetchStage:
             run_pipeline(RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lambda _m: None)
         assert fetcher.calls == ["video"]
 
-    def test_changing_the_window_does_not_download_again(self, tmp_path, fakes, fetcher):
-        """The acceptance criterion for where `fetch` sits in the chain.
+    def test_the_window_is_asked_of_the_site_and_never_cut_twice(self, tmp_path, fakes, fetcher):
+        """Regression: `--start`/`--end` were not passed to yt-dlp, so `run URL --start
+        1:00:00 --end 1:01:00` downloaded a whole four-hour source to keep sixty seconds.
 
-        Re-cutting a 400 MB download because the user moved `--start` by ten seconds would
-        make the feature unusable on anything but a fast connection.
+        The span goes to the download now, which also means the `trim` stage must not run:
+        what landed already starts at `--start`, and cutting it again at an absolute
+        1:00:00 would ask for an hour into a one-minute file.
+        """
+        run_pipeline(
+            RunConfig(url=URL, out_dir=tmp_path, engine="fake", start="2", end="5"),
+            log=lambda _m: None,
+        )
+        assert fetcher.windows == [(2.0, 5.0)]
+
+        work = tmp_path / ".subtitler" / pipeline.fetch_mod.work_stem(URL)
+        assert not (work / "trim.meta.json").exists()
+        assert _duration(work / "fetch.wav") == pytest.approx(3.0, abs=0.3)
+        assert _duration(work / "extract.wav") == pytest.approx(3.0, abs=0.3)
+
+    def test_moving_the_window_fetches_the_new_window(self, tmp_path, fakes, fetcher):
+        """The deliberate reversal that came with passing the range through.
+
+        `fetch` used to leave the window out of its key so that moving `--start` re-cut a
+        cached download. But the download was the entire source, which is the cost this
+        stage exists to avoid; now it is the window, so a different window is a different
+        file and has to be fetched. What is re-fetched is three seconds, not four hours.
         """
         run_pipeline(
             RunConfig(url=URL, out_dir=tmp_path, engine="fake", start="2", end="5"),
@@ -542,9 +628,18 @@ class TestFetchStage:
             RunConfig(url=URL, out_dir=tmp_path, engine="fake", start="3", end="6"),
             log=lambda _m: None,
         )
+        assert fetcher.windows == [(2.0, 5.0), (3.0, 6.0)]
+        assert "fetch" not in result.cached
+
+    def test_a_second_run_of_the_same_window_does_not_download_again(
+        self, tmp_path, fakes, fetcher
+    ):
+        for _ in range(2):
+            run_pipeline(
+                RunConfig(url=URL, out_dir=tmp_path, engine="fake", start="2", end="5"),
+                log=lambda _m: None,
+            )
         assert fetcher.calls == ["video"]
-        assert "fetch" in result.cached
-        assert "trim" not in result.cached
 
     def test_srt_only_asks_for_audio(self, tmp_path, fakes, fetcher):
         """Downloading 1080p to produce a text file spends the user's bandwidth on
@@ -750,6 +845,59 @@ class TestEditStage:
         work = pipeline.work_dir(cfg(tmp_path))
         assert not (work / "edit.meta.json").exists()
         assert not (work / "edited.json").exists()
+
+    @pytest.mark.parametrize(
+        ("fault", "text", "expected"),
+        [
+            ("invalid JSON", "{ not json", "not valid JSON"),
+            (
+                "a schema from another version",
+                '{"schema_version": 99, "base_key": "k", "edits": []}',
+                "schema_version",
+            ),
+            (
+                '"edit" typed for "edits"',
+                '{"schema_version": 1, "base_key": "k", "edit": [{"index": 1, "text": "a"}]}',
+                'no "edits" key',
+            ),
+            (
+                "no base_key",
+                '{"schema_version": 1, "edits": [{"index": 1, "text": "a"}]}',
+                "base_key",
+            ),
+        ],
+    )
+    def test_a_malformed_edits_file_stops_the_run_loudly(
+        self, tmp_path, fakes, fault, text, expected
+    ):
+        """Regression: a malformed `edits.json` was read as "no corrections", so a typo in
+        the one file a human is invited to open produced a run that reported success, burned
+        the uncorrected words in, and said nothing at all.
+
+        Loud on the same channel as the stale-key report, because a GUI run shows the user
+        that log and not the traceback.
+        """
+        self._review(tmp_path)
+        work = pipeline.work_dir(cfg(tmp_path))
+        edits_mod.path_for(work).write_text(text, encoding="utf-8")
+
+        lines: list[str] = []
+        with pytest.raises(edits_mod.EditFileError, match=expected):
+            run_pipeline(cfg(tmp_path), log=lines.append)
+        assert any(expected in line for line in lines), lines
+        assert any(edits_mod.EDITS_NAME in line for line in lines), f"{fault}: {lines}"
+
+    def test_deleting_the_file_is_the_documented_way_back(self, tmp_path, fakes):
+        """The escape hatch the message names has to be real: the run must not stay broken
+        once the corrections are gone."""
+        self._review(tmp_path)
+        work = pipeline.work_dir(cfg(tmp_path))
+        edits_mod.path_for(work).write_text("{ not json", encoding="utf-8")
+        with pytest.raises(edits_mod.EditFileError):
+            run_pipeline(cfg(tmp_path), log=lambda _m: None)
+
+        edits_mod.clear(work)
+        assert run_pipeline(cfg(tmp_path), log=lambda _m: None).srt.exists()
 
 
 class TestSoftMux:
