@@ -26,6 +26,7 @@ from subtitler import postedit
 from subtitler.cues import CueConfig
 from subtitler.doctor import Platform
 from subtitler.gui import files, forms, jobs
+from subtitler.gui import server as server_mod
 from subtitler.gui.app import GuiApp
 from subtitler.gui.server import build_server, is_local_host_header
 from subtitler.model import Segment, Transcript, Word
@@ -791,6 +792,31 @@ class TestHostHeader:
         assert is_local_host_header("[::1]:9")
         assert not is_local_host_header("evil.example.com:8000")
         assert not is_local_host_header(None)
+
+
+class TestLaunching:
+    def test_a_machine_with_no_browser_prints_the_address_instead_of_raising(
+        self, monkeypatch
+    ) -> None:
+        """The analogue of the tkinter problem this GUI exists to avoid.
+
+        `webbrowser.open` raises `webbrowser.Error` where there is nothing to open: a
+        headless box, or a session over SSH with no DISPLAY. The right outcome is the URL
+        already printed and one sentence telling the user to open it, not a traceback in
+        front of someone who was told to type one command.
+        """
+        import webbrowser
+
+        monkeypatch.setattr(
+            webbrowser, "open", lambda _url: (_ for _ in ()).throw(webbrowser.Error("no browser"))
+        )
+        assert server_mod._open_browser("http://127.0.0.1:1/") is False
+
+    def test_a_browser_that_simply_declines_is_also_not_an_error(self, monkeypatch) -> None:
+        import webbrowser
+
+        monkeypatch.setattr(webbrowser, "open", lambda _url: False)
+        assert server_mod._open_browser("http://127.0.0.1:1/") is False
 
 
 class TestOverHttp:
