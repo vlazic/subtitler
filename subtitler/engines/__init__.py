@@ -4,53 +4,76 @@ Two rules this module exists to hold:
 
   * `--engine auto` silently skips anything unavailable and reports what it settled on.
   * An **explicit** engine that cannot run is a hard error naming the fix, never a silent
-    fallback. Falling back quietly is how you end up benchmarking the wrong backend.
-
-Phase 1 registers the cloud engine only. The local engines (mlx on Apple Silicon,
-faster-whisper elsewhere) join the registry in Phase 3 and take over the top of the
-preference order at that point.
+    fallback. Falling back quietly is how you end up benchmarking the wrong backend, or
+    uploading a private video to a cloud API because a local model failed to load.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from subtitler.doctor import detect_platform
 from subtitler.engines.base import Availability, Engine, EngineUnavailable
+from subtitler.engines.faster import FasterWhisperEngine
 from subtitler.engines.groq import GroqEngine
+from subtitler.engines.mlx import MlxWhisperEngine
 
-__all__ = ["EngineUnavailable", "available_engines", "is_apple_silicon", "resolve"]
+__all__ = [
+    "ALL_ENGINES",
+    "EngineUnavailable",
+    "available_engines",
+    "default_order",
+    "is_apple_silicon",
+    "resolve",
+]
 
-# Preference order for `auto`, best first. Local engines are prepended in Phase 3 so the
-# default path never uploads anything.
-_AUTO_ORDER = ["groq", "groq-turbo"]
+ALL_ENGINES = ("mlx", "faster-whisper", "groq", "groq-turbo")
+
+_BUILDERS: dict[str, Callable[[str, str], Engine]] = {
+    "mlx": lambda model, device: MlxWhisperEngine(model, device=device),
+    "faster-whisper": lambda model, device: FasterWhisperEngine(model, device=device),
+    "groq": lambda model, _device: GroqEngine(model),
+    "groq-turbo": lambda _model, _device: GroqEngine("turbo"),
+}
 
 
 def is_apple_silicon() -> bool:
     """Platform facts come from doctor.detect_platform, never from `platform` directly.
 
-    Keeping one detector means the mac branch stays fakeable in tests, which is the only
-    way the primary target gets exercised on a Linux dev machine.
+    One detector means the mac branch stays fakeable in tests, which is the only way the
+    primary target gets exercised on a Linux dev machine.
     """
     return detect_platform().is_apple_silicon
 
 
+def default_order(apple_silicon: bool | None = None) -> tuple[str, ...]:
+    """Preference order for `auto`, best first.
+
+    Local before cloud, always: the friend's video should not leave his laptop just
+    because a download has not happened yet. Cloud is a fallback, not a shortcut.
+    """
+    mac = is_apple_silicon() if apple_silicon is None else apple_silicon
+    local = ("mlx", "faster-whisper") if mac else ("faster-whisper", "mlx")
+    return (*local, "groq", "groq-turbo")
+
+
 def _build(name: str, *, model: str, device: str) -> Engine:
-    if name in {"groq", "groq-turbo"}:
-        return GroqEngine("turbo" if name == "groq-turbo" else model)
-    raise EngineUnavailable(
-        name,
-        "not implemented yet (local engines land in Phase 3)",
-        "use --engine groq for now",
-    )
+    builder = _BUILDERS.get(name)
+    if builder is None:
+        raise EngineUnavailable(name, "unknown engine", f"choose from: {', '.join(ALL_ENGINES)}")
+    return builder(model, device)
 
 
 def available_engines(*, model: str = "large-v3", device: str = "auto") -> dict[str, Availability]:
-    """Probe every known engine. Used by `subtitler doctor` and by `auto` resolution."""
+    """Probe every known engine. Used by `auto` resolution and by reporting."""
     result: dict[str, Availability] = {}
-    for name in _AUTO_ORDER:
+    for name in ALL_ENGINES:
         try:
             result[name] = _build(name, model=model, device=device).availability()
         except EngineUnavailable as exc:
             result[name] = Availability(False, exc.reason, exc.fix)
+        except LookupError as exc:  # the backend has no such model
+            result[name] = Availability(False, str(exc), "")
     return result
 
 
@@ -63,16 +86,19 @@ def resolve(name: str = "auto", *, model: str = "large-v3", device: str = "auto"
         return engine
 
     problems: list[str] = []
-    for candidate in _AUTO_ORDER:
+    for candidate in default_order():
         try:
             engine = _build(candidate, model=model, device=device)
-        except EngineUnavailable as exc:
-            problems.append(f"  {candidate}: {exc.reason}")
+            avail = engine.availability()
+        except (EngineUnavailable, LookupError) as exc:
+            problems.append(f"  {candidate}: {exc}")
             continue
-        avail = engine.availability()
         if avail.ok:
             return engine
-        problems.append(f"  {candidate}: {avail.reason}" + (f" ({avail.fix})" if avail.fix else ""))
+        detail = f"  {candidate}: {avail.reason}"
+        if avail.fix:
+            detail += f"\n      fix: {avail.fix}"
+        problems.append(detail)
 
     raise EngineUnavailable(
         "auto",

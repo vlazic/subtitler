@@ -100,6 +100,64 @@ class Engine(Protocol):
 # --------------------------------------------------------------------------------------
 
 
+def peak_dbfs(wav_path: Path, start: float, end: float) -> float:
+    """Peak level of one time span in a 16-bit PCM WAV, in dBFS.
+
+    Deliberately stdlib only (`wave` + `array`): the silence gate has to work for every
+    engine, including on a Mac where numpy is only present as an mlx transitive dependency.
+    Reading just the frames for the span keeps this cheap even on a long file.
+    """
+    import wave
+    from array import array
+
+    try:
+        with wave.open(str(wav_path), "rb") as wav:
+            if wav.getsampwidth() != 2:
+                return 0.0  # not 16-bit; do not guess, treat as loud and keep the segment
+            rate = wav.getframerate()
+            channels = wav.getnchannels()
+            total = wav.getnframes()
+
+            first = max(0, min(total, int(start * rate)))
+            last = max(first, min(total, int(end * rate)))
+            if last <= first:
+                return -float("inf")
+
+            wav.setpos(first)
+            raw = wav.readframes(last - first)
+    except (OSError, wave.Error):
+        return 0.0
+
+    samples = array("h")
+    samples.frombytes(raw[: len(raw) - (len(raw) % (2 * channels))])
+    if not samples:
+        return -float("inf")
+
+    peak = max(abs(s) for s in samples)
+    if peak == 0:
+        return -float("inf")
+    import math
+
+    return 20 * math.log10(peak / 32768.0)
+
+
+def drop_silent_segments(
+    segments: tuple[Any, ...],
+    wav_path: Path,
+    *,
+    threshold_dbfs: float = SILENT_PEAK_DBFS,
+) -> tuple[Any, ...]:
+    """Remove segments whose audio is essentially silent.
+
+    Whisper invents filler over silence ("Hvala.", "Thank you.", "Titlovi ..."). Dropping
+    the span outright beats filtering the text afterwards: by then the hallucination has
+    already claimed a timestamp range and skewed the segmentation around it.
+    """
+    if not wav_path.exists():
+        return segments
+    return tuple(s for s in segments if peak_dbfs(wav_path, s.start, s.end) > threshold_dbfs)
+
+
 def collapse_repetition(
     text: str,
     *,

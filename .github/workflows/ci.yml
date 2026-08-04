@@ -125,6 +125,20 @@ jobs:
             /tmp/fixture.srt -o "/tmp/a dir: with 'quotes'/out: file.mp4"
           test -s "/tmp/a dir: with 'quotes'/out: file.mp4"
 
+      - name: Local transcription
+        # The whole point of the macOS job: prove mlx actually transcribes on Apple
+        # Silicon, not merely that the code path is reachable. `tiny` keeps CI to ~75 MB
+        # and a few seconds; it is far too weak for Serbian and is never a default.
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          uv run subtitler models download tiny
+          uv run subtitler models list
+          uv run subtitler run fixtures/tiny-10s.wav --model tiny --srt-only -o /tmp/local
+          test -s /tmp/local/tiny-10s.srt
+          echo "--- transcript ---"
+          cat /tmp/local/tiny-10s.srt
+
       - name: Render the diacritics frame
         # č ć đ š ž must come out of the bundled font identically on both platforms.
         # Phase 4 turns this into a pixel diff against a checked-in reference.

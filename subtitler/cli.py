@@ -18,7 +18,6 @@ from subtitler import __version__
 # Subcommands land phase by phase. Anything still stubbed exits with a clear message
 # naming the phase rather than an AttributeError or a half-run pipeline.
 _PENDING = {
-    "models": "Phase 3",
     "bench": "Phase 7",
 }
 
@@ -100,6 +99,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_models = sub.add_parser("models", help="manage the local model cache")
     p_models.add_argument("action", choices=["list", "download", "path", "rm"])
     p_models.add_argument("name", nargs="?", default="large-v3")
+    p_models.add_argument(
+        "--backend",
+        choices=["mlx", "faster-whisper"],
+        help="default: whichever this machine would use",
+    )
+    p_models.add_argument("--all", action="store_true", help="list every backend")
 
     p_burn = sub.add_parser("burn", help="burn existing subtitles into a video")
     p_burn.add_argument("video")
@@ -252,6 +257,41 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 1 if any(s.blocking for s in statuses) else 0
 
 
+def _cmd_models(args: argparse.Namespace) -> int:
+    from subtitler import models
+    from subtitler.engines import is_apple_silicon
+
+    # The backend whose weights this machine would actually use.
+    backend = args.backend or ("mlx" if is_apple_silicon() else "faster-whisper")
+
+    if args.action == "list":
+        print(models.render_list(None if args.all else backend))
+        return 0
+
+    try:
+        spec = models.resolve(args.name, backend)
+    except models.ModelNotFound as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.action == "path":
+        path = models.local_path(spec)
+        print(path or models.cache_root())
+        return 0 if path else 1
+
+    if args.action == "rm":
+        removed = models.remove(spec)
+        print(f"{'removed' if removed else 'nothing to remove for'} {spec.key}", file=sys.stderr)
+        return 0
+
+    # download
+    if models.local_path(spec) is not None:
+        print(f"{spec.key} is already cached at {models.local_path(spec)}", file=sys.stderr)
+        return 0
+    models.download(spec, progress=lambda msg: print(msg, file=sys.stderr))
+    return 0
+
+
 def _cmd_lint(args: argparse.Namespace) -> int:
     from subtitler.cues import CueConfig, lint_cues
     from subtitler.render import read_subtitles
@@ -333,6 +373,7 @@ def _cmd_convert(args: argparse.Namespace) -> int:
 _HANDLERS = {
     "run": _cmd_run,
     "doctor": _cmd_doctor,
+    "models": _cmd_models,
     "lint": _cmd_lint,
     "burn": _cmd_burn,
     "convert": _cmd_convert,
