@@ -23,9 +23,15 @@ episodes exist, 26 have transcripts. This is the workload the prior bash pipelin
 
 ## 3. Non-goals
 
-Translation. Speaker diarization. Live or streaming input. A GUI. Windows. A hosted service.
+Translation. Speaker diarization. Live or streaming input. Windows. A hosted service.
 Docker or CUDA container images (the prior art had these and they were dead weight).
 Languages other than Serbian as a *tuned* target: others work, they are just not tuned.
+
+**A GUI was a non-goal and is no longer one** (amended 2026-08-04). The primary user story
+is a friend who will not open a terminal, and a CLI does not serve that person however good
+it is. It earns its place on three conditions, all currently met: it adds no dependency (it
+is `http.server` plus one HTML file), it is a thin shell over the same pipeline rather than
+a second code path, and it is covered by tests. If any of those stops being true, it goes.
 
 ## 4. Product surface
 
@@ -38,6 +44,7 @@ Languages other than Serbian as a *tuned* target: others work, they are just not
 | `subtitler lint SUBS` | cue-quality violations, exit 1 if any |
 | `subtitler convert IN -o OUT` | verbose_json, srt, and vtt in any direction |
 | `subtitler bench run/report/agents` | engine x denoiser quality matrix |
+| `subtitler gui` | browser interface over the same pipeline, for non-terminal users |
 
 ## 5. Acceptance criteria
 
