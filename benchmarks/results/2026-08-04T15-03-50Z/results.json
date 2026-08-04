@@ -1,0 +1,2540 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-08-04T15:04:58.810407+00:00",
+  "git": {
+    "sha": "77a00173c4c1dbf5e6679514ac63278ddaaf9c05",
+    "branch": "main",
+    "dirty": false,
+    "dirty_paths": []
+  },
+  "allow_dirty": false,
+  "config": {
+    "clips": [
+      "fixtures/gozba-sample.mp3",
+      "fixtures/uvod-u-pravo.m4a"
+    ],
+    "denoisers": [
+      "none"
+    ],
+    "engines": [
+      "faster-whisper",
+      "groq-turbo"
+    ],
+    "model": "large-v3",
+    "device": "cuda",
+    "batch_size": 0,
+    "language": "sr",
+    "fix_axis": true,
+    "fix_model": "openai/gpt-4o",
+    "cues": {
+      "max_line": 42,
+      "max_lines": 2,
+      "min_dur": 1.0,
+      "max_dur": 7.0,
+      "max_cps": 20.0
+    }
+  },
+  "references": {
+    "gozba-sample": {
+      "clip": "gozba-sample",
+      "reference": null,
+      "status": "absent",
+      "human_verified": false,
+      "adjudicated": false,
+      "source": "",
+      "note": "No reference transcript. Reference-free metrics only; WER is not reported for this clip. Phase 8 (LLM adjudication) produces this file."
+    },
+    "uvod-u-pravo": {
+      "clip": "uvod-u-pravo",
+      "reference": null,
+      "status": "absent",
+      "human_verified": false,
+      "adjudicated": false,
+      "source": "",
+      "note": "No reference transcript. Reference-free metrics only; WER is not reported for this clip. Phase 8 (LLM adjudication) produces this file."
+    }
+  },
+  "results": [
+    {
+      "cell_id": "gozba-sample__none__faster-whisper__large-v3__nofix",
+      "clip": "fixtures/gozba-sample.mp3",
+      "clip_id": "gozba-sample",
+      "denoise": "none",
+      "engine_requested": "faster-whisper",
+      "model_requested": "large-v3",
+      "device_requested": "cuda",
+      "batch_size": 0,
+      "fix": false,
+      "fix_model": "",
+      "ok": true,
+      "error": "",
+      "wall_s": 7.4638565860223025,
+      "peak_rss_mb": 3385.82421875,
+      "engine": "faster-whisper",
+      "cached_stages": [
+        "extract"
+      ],
+      "audio_s": 109.0,
+      "decode_s": 4.505747032002546,
+      "rtf": 0.04133712873396831,
+      "language": "sr",
+      "model": "large-v3",
+      "model_revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "engine_params": {
+        "language": "sr",
+        "beam_size": 5,
+        "temperature": 0.0,
+        "vad": true,
+        "device": "cuda",
+        "compute_type": "float16",
+        "batch_size": 0,
+        "initial_prompt": true,
+        "cuda_fallback": null,
+        "seed": 20260101,
+        "repetition_collapsed": 0,
+        "silence_dropped": 0
+      },
+      "segments": 11,
+      "fix_report": null,
+      "text": "Misao lokove filozofije, ukratko izraženo, sastoji se u ovome. Da se opšta predstava, da se ono što je istinito, to jest, da se saznanje zasniva na iskustvu. Propisuje se kao put saznanja s jedne strane iskustvo i posmatranje, a s druge strane analiziranje i isticanje opštih odredava. To je empirizam koji metafizicira i to predstavlja uobičajeni put u naukama. Ovim Hegelovim rečima o Lokovoj filozofiji, koja je napisao u svojoj istoriji filozofije, započinjemo današnju emisiju. Poštovani slušalci, u današnjoj emisiji razgovaramo sa Mašanom Bogdanovskim, docentom na Filozofskom fakultetu u Beogradu. Dobrodošli na gozbu. Hvala. Razgovaramo o filozofiji Johna Locke, o njegove epistemologiji, ali i o epistemologiji religije. Ali recite nam pre svega toga, zašto je uopšte John Locke značajan za istoriju filozofije, odnosno kako biste vi odredili taj značaj? Svakako da najveći značaj leži u tome da je Locke začetnik modernog empirizma, empirizma onako kakvog ga nalazimo u britanskoj školi, a tog filozofska.",
+      "cues": [
+        {
+          "index": 1,
+          "start": 6.48,
+          "end": 11.06,
+          "lines": [
+            "Misao lokove filozofije,",
+            "ukratko izraženo, sastoji se u ovome."
+          ]
+        },
+        {
+          "index": 2,
+          "start": 11.62,
+          "end": 16.1,
+          "lines": [
+            "Da se opšta predstava,",
+            "da se ono što je istinito,"
+          ]
+        },
+        {
+          "index": 3,
+          "start": 16.26,
+          "end": 20.2,
+          "lines": [
+            "to jest,",
+            "da se saznanje zasniva na iskustvu."
+          ]
+        },
+        {
+          "index": 4,
+          "start": 20.94,
+          "end": 26.94,
+          "lines": [
+            "Propisuje se kao put saznanja s jedne",
+            "strane iskustvo i posmatranje,"
+          ]
+        },
+        {
+          "index": 5,
+          "start": 27.0,
+          "end": 32.22,
+          "lines": [
+            "a s druge strane analiziranje",
+            "i isticanje opštih odredava."
+          ]
+        },
+        {
+          "index": 6,
+          "start": 32.22,
+          "end": 36.28,
+          "lines": [
+            "To je empirizam koji metafizicira"
+          ]
+        },
+        {
+          "index": 7,
+          "start": 36.28,
+          "end": 41.24,
+          "lines": [
+            "i to predstavlja uobičajeni put u naukama."
+          ]
+        },
+        {
+          "index": 8,
+          "start": 43.54,
+          "end": 48.66,
+          "lines": [
+            "Ovim Hegelovim rečima",
+            "o Lokovoj filozofiji,"
+          ]
+        },
+        {
+          "index": 9,
+          "start": 48.7,
+          "end": 53.16,
+          "lines": [
+            "koja je napisao u svojoj istoriji",
+            "filozofije, započinjemo današnju emisiju."
+          ]
+        },
+        {
+          "index": 10,
+          "start": 62.04,
+          "end": 67.56,
+          "lines": [
+            "Poštovani slušalci, u današnjoj emisiji",
+            "razgovaramo sa Mašanom Bogdanovskim,"
+          ]
+        },
+        {
+          "index": 11,
+          "start": 67.58,
+          "end": 70.94,
+          "lines": [
+            "docentom na Filozofskom",
+            "fakultetu u Beogradu."
+          ]
+        },
+        {
+          "index": 12,
+          "start": 72.0,
+          "end": 73.04,
+          "lines": [
+            "Dobrodošli na gozbu."
+          ]
+        },
+        {
+          "index": 13,
+          "start": 73.34,
+          "end": 74.34,
+          "lines": [
+            "Hvala."
+          ]
+        },
+        {
+          "index": 14,
+          "start": 75.9,
+          "end": 78.1,
+          "lines": [
+            "Razgovaramo o filozofiji Johna Locke,"
+          ]
+        },
+        {
+          "index": 15,
+          "start": 78.32,
+          "end": 83.52,
+          "lines": [
+            "o njegove epistemologiji,",
+            "ali i o epistemologiji religije."
+          ]
+        },
+        {
+          "index": 16,
+          "start": 84.36,
+          "end": 88.4,
+          "lines": [
+            "Ali recite nam pre svega toga,"
+          ]
+        },
+        {
+          "index": 17,
+          "start": 88.46,
+          "end": 92.24,
+          "lines": [
+            "zašto je uopšte John Locke",
+            "značajan za istoriju filozofije,"
+          ]
+        },
+        {
+          "index": 18,
+          "start": 92.28,
+          "end": 94.56,
+          "lines": [
+            "odnosno kako biste vi odredili taj značaj?"
+          ]
+        },
+        {
+          "index": 19,
+          "start": 96.12,
+          "end": 102.52,
+          "lines": [
+            "Svakako da najveći značaj leži u tome",
+            "da je Locke začetnik modernog empirizma,"
+          ]
+        },
+        {
+          "index": 20,
+          "start": 102.64,
+          "end": 108.96,
+          "lines": [
+            "empirizma onako kakvog ga nalazimo",
+            "u britanskoj školi, a tog filozofska."
+          ]
+        }
+      ],
+      "lint_violations": 0,
+      "cue_stats": {
+        "count": 20,
+        "total_chars": 997,
+        "mean_cps": 12.264795647749102,
+        "p95_cps": 18.421052631578938,
+        "max_cps": 19.230769230769116,
+        "over_line_pct": 0.0,
+        "over_lines_pct": 0.0,
+        "over_dur_pct": 0.0,
+        "over_cps_pct": 0.0,
+        "under_min_dur_pct": 0.0
+      },
+      "hallucination": {
+        "longest_repeat_n": 2,
+        "longest_repeat_text": "da se",
+        "repetition_collapsed": 0,
+        "silence_dropped": 0,
+        "prompt_echo_n": 0,
+        "prompt_echo_text": "",
+        "filler_hits": {
+          "hvala": 1
+        }
+      },
+      "reference_score": null
+    },
+    {
+      "cell_id": "gozba-sample__none__faster-whisper__large-v3__fix",
+      "clip": "fixtures/gozba-sample.mp3",
+      "clip_id": "gozba-sample",
+      "denoise": "none",
+      "engine_requested": "faster-whisper",
+      "model_requested": "large-v3",
+      "device_requested": "cuda",
+      "batch_size": 0,
+      "fix": true,
+      "fix_model": "openai/gpt-4o",
+      "ok": true,
+      "error": "",
+      "wall_s": 11.094007344101556,
+      "peak_rss_mb": 249.21875,
+      "engine": "faster-whisper",
+      "cached_stages": [
+        "extract",
+        "transcribe",
+        "cues"
+      ],
+      "audio_s": 109.0,
+      "decode_s": 4.505747032002546,
+      "rtf": 0.04133712873396831,
+      "language": "sr",
+      "model": "large-v3",
+      "model_revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "engine_params": {
+        "language": "sr",
+        "beam_size": 5,
+        "temperature": 0.0,
+        "vad": true,
+        "device": "cuda",
+        "compute_type": "float16",
+        "batch_size": 0,
+        "initial_prompt": true,
+        "cuda_fallback": null,
+        "seed": 20260101,
+        "repetition_collapsed": 0,
+        "silence_dropped": 0
+      },
+      "segments": 11,
+      "fix_report": {
+        "model": "openai/gpt-4o",
+        "batches": 1,
+        "rejected_batches": 0,
+        "changed_cues": 6,
+        "dropped_cues": 0
+      },
+      "text": "Misao Lokove filozofije, ukratko izraženo, sastoji se u ovome. Da se opšta predstava, da se ono što je istinito, to jest, da se saznanje zasniva na iskustvu. Propisuje se kao put saznanja s jedne strane iskustvo i posmatranje, a s druge strane analiziranje i isticanje opštih odredaba. To je empirizam koji metafizicira i to predstavlja uobičajeni put u naukama. Ovim Hegelovim rečima o Lokovoj filozofiji, koja je napisao u svojoj istoriji filozofije, započinjemo današnju emisiju. Poštovani slušaoci, u današnjoj emisiji razgovaramo sa Mašanom Bogdanovskim, docentom na Filozofskom fakultetu u Beogradu. Dobrodošli na gozbu. Hvala. Razgovaramo o filozofiji Johna Lockea, o njegovoj epistemologiji, ali i o epistemologiji religije. Ali recite nam pre svega toga, zašto je uopšte John Locke značajan za istoriju filozofije, odnosno kako biste vi odredili taj značaj? Svakako da najveći značaj leži u tome da je Locke začetnik modernog empirizma, empirizma onako kakvog ga nalazimo u britanskoj školi, a to je filozofska.",
+      "cues": [
+        {
+          "index": 1,
+          "start": 6.48,
+          "end": 11.06,
+          "lines": [
+            "Misao Lokove filozofije,",
+            "ukratko izraženo, sastoji se u ovome."
+          ]
+        },
+        {
+          "index": 2,
+          "start": 11.62,
+          "end": 16.1,
+          "lines": [
+            "Da se opšta predstava,",
+            "da se ono što je istinito,"
+          ]
+        },
+        {
+          "index": 3,
+          "start": 16.26,
+          "end": 20.2,
+          "lines": [
+            "to jest,",
+            "da se saznanje zasniva na iskustvu."
+          ]
+        },
+        {
+          "index": 4,
+          "start": 20.94,
+          "end": 26.94,
+          "lines": [
+            "Propisuje se kao put saznanja s jedne",
+            "strane iskustvo i posmatranje,"
+          ]
+        },
+        {
+          "index": 5,
+          "start": 27.0,
+          "end": 32.22,
+          "lines": [
+            "a s druge strane analiziranje",
+            "i isticanje opštih odredaba."
+          ]
+        },
+        {
+          "index": 6,
+          "start": 32.22,
+          "end": 36.28,
+          "lines": [
+            "To je empirizam koji metafizicira"
+          ]
+        },
+        {
+          "index": 7,
+          "start": 36.28,
+          "end": 41.24,
+          "lines": [
+            "i to predstavlja uobičajeni put u naukama."
+          ]
+        },
+        {
+          "index": 8,
+          "start": 43.54,
+          "end": 48.66,
+          "lines": [
+            "Ovim Hegelovim rečima",
+            "o Lokovoj filozofiji,"
+          ]
+        },
+        {
+          "index": 9,
+          "start": 48.7,
+          "end": 53.16,
+          "lines": [
+            "koja je napisao u svojoj istoriji",
+            "filozofije, započinjemo današnju emisiju."
+          ]
+        },
+        {
+          "index": 10,
+          "start": 62.04,
+          "end": 67.56,
+          "lines": [
+            "Poštovani slušaoci, u današnjoj emisiji",
+            "razgovaramo sa Mašanom Bogdanovskim,"
+          ]
+        },
+        {
+          "index": 11,
+          "start": 67.58,
+          "end": 70.94,
+          "lines": [
+            "docentom na Filozofskom",
+            "fakultetu u Beogradu."
+          ]
+        },
+        {
+          "index": 12,
+          "start": 72.0,
+          "end": 73.04,
+          "lines": [
+            "Dobrodošli na gozbu."
+          ]
+        },
+        {
+          "index": 13,
+          "start": 73.34,
+          "end": 74.34,
+          "lines": [
+            "Hvala."
+          ]
+        },
+        {
+          "index": 14,
+          "start": 75.9,
+          "end": 78.1,
+          "lines": [
+            "Razgovaramo o filozofiji Johna Lockea,"
+          ]
+        },
+        {
+          "index": 15,
+          "start": 78.32,
+          "end": 83.52,
+          "lines": [
+            "o njegovoj epistemologiji,",
+            "ali i o epistemologiji religije."
+          ]
+        },
+        {
+          "index": 16,
+          "start": 84.36,
+          "end": 88.4,
+          "lines": [
+            "Ali recite nam pre svega toga,"
+          ]
+        },
+        {
+          "index": 17,
+          "start": 88.46,
+          "end": 92.24,
+          "lines": [
+            "zašto je uopšte John Locke",
+            "značajan za istoriju filozofije,"
+          ]
+        },
+        {
+          "index": 18,
+          "start": 92.28,
+          "end": 94.56,
+          "lines": [
+            "odnosno kako biste vi odredili taj značaj?"
+          ]
+        },
+        {
+          "index": 19,
+          "start": 96.12,
+          "end": 102.52,
+          "lines": [
+            "Svakako da najveći značaj leži u tome",
+            "da je Locke začetnik modernog empirizma,"
+          ]
+        },
+        {
+          "index": 20,
+          "start": 102.64,
+          "end": 108.96,
+          "lines": [
+            "empirizma onako kakvog ga nalazimo",
+            "u britanskoj školi, a to je filozofska."
+          ]
+        }
+      ],
+      "lint_violations": 0,
+      "cue_stats": {
+        "count": 20,
+        "total_chars": 1001,
+        "mean_cps": 12.312961089901886,
+        "p95_cps": 18.421052631578938,
+        "max_cps": 19.230769230769116,
+        "over_line_pct": 0.0,
+        "over_lines_pct": 0.0,
+        "over_dur_pct": 0.0,
+        "over_cps_pct": 0.0,
+        "under_min_dur_pct": 0.0
+      },
+      "hallucination": {
+        "longest_repeat_n": 2,
+        "longest_repeat_text": "da se",
+        "repetition_collapsed": 0,
+        "silence_dropped": 0,
+        "prompt_echo_n": 0,
+        "prompt_echo_text": "",
+        "filler_hits": {
+          "hvala": 1
+        }
+      },
+      "reference_score": null,
+      "fix_change_rate": 0.0392156862745098
+    },
+    {
+      "cell_id": "gozba-sample__none__groq-turbo__large-v3__nofix",
+      "clip": "fixtures/gozba-sample.mp3",
+      "clip_id": "gozba-sample",
+      "denoise": "none",
+      "engine_requested": "groq-turbo",
+      "model_requested": "large-v3",
+      "device_requested": "cuda",
+      "batch_size": 0,
+      "fix": false,
+      "fix_model": "",
+      "ok": true,
+      "error": "",
+      "wall_s": 1.3441559550119564,
+      "peak_rss_mb": 49.63671875,
+      "engine": "groq-turbo",
+      "cached_stages": [
+        "extract"
+      ],
+      "audio_s": 108.999999488,
+      "decode_s": 1.1352184360148385,
+      "rtf": 0.010414848085754502,
+      "language": "Serbian",
+      "model": "whisper-large-v3-turbo",
+      "model_revision": "hosted",
+      "engine_params": {
+        "language": "sr",
+        "temperature": 0.0,
+        "prompt": true,
+        "repetition_collapsed": 0,
+        "silence_dropped": null
+      },
+      "segments": 11,
+      "fix_report": null,
+      "text": "Misao Lokove filozofije ukratko izraženo sastoji se u ovome. Da se opšto predstava da se ono što je istinito, to jest da se saznanje zasniva na iskustvu. Propisuje se kao put saznanja s jedne strane iskustvo i posmatranje, a s druge strane analiziranje i isticanje opštih odredava. To je empirizam koji metafizicira i to predstavlja uobičajeni put u naukama. Ovim Hegelovim rečima o Lokovoj filozofiji, koje je napisao u svojoj istoriji filozofije, započinjemo današnju emisiju. Poštovani slušalci, u današnjoj emisiji razgovaramo sa Mašanom Bogdanovskim, docentom na Filozofskom fakultetu u Beogradu. Dobrodošli na gozbu. Hvala. Razgovaramo o filozofiji Johna Locke, o njegove epistemologiji, ali i o epistemologiji religije. Ali recite nam pre svega toga, zašto je uopšte John Locke značajan za istoriju filozofije, odnosno kako biste vi odredili taj značaj? Svakako da najveći značaj leži u tome da je Lok začetnik modernog empirizma. Empirizma onako kako ga nalazimo u britanskoj školi tog filozofske.",
+      "cues": [
+        {
+          "index": 1,
+          "start": 6.84,
+          "end": 11.18,
+          "lines": [
+            "Misao Lokove filozofije ukratko",
+            "izraženo sastoji se u ovome."
+          ]
+        },
+        {
+          "index": 2,
+          "start": 12.38,
+          "end": 16.4,
+          "lines": [
+            "Da se opšto predstava",
+            "da se ono što je istinito,"
+          ]
+        },
+        {
+          "index": 3,
+          "start": 16.4,
+          "end": 20.3,
+          "lines": [
+            "to jest",
+            "da se saznanje zasniva na iskustvu."
+          ]
+        },
+        {
+          "index": 4,
+          "start": 21.28,
+          "end": 27.06,
+          "lines": [
+            "Propisuje se kao put saznanja s jedne",
+            "strane iskustvo i posmatranje,"
+          ]
+        },
+        {
+          "index": 5,
+          "start": 27.06,
+          "end": 32.36,
+          "lines": [
+            "a s druge strane analiziranje",
+            "i isticanje opštih odredava."
+          ]
+        },
+        {
+          "index": 6,
+          "start": 33.38,
+          "end": 36.44,
+          "lines": [
+            "To je empirizam koji metafizicira"
+          ]
+        },
+        {
+          "index": 7,
+          "start": 36.44,
+          "end": 41.36,
+          "lines": [
+            "i to predstavlja uobičajeni put u naukama."
+          ]
+        },
+        {
+          "index": 8,
+          "start": 43.86,
+          "end": 48.8,
+          "lines": [
+            "Ovim Hegelovim rečima",
+            "o Lokovoj filozofiji,"
+          ]
+        },
+        {
+          "index": 9,
+          "start": 48.8,
+          "end": 53.34,
+          "lines": [
+            "koje je napisao u svojoj istoriji",
+            "filozofije, započinjemo današnju emisiju."
+          ]
+        },
+        {
+          "index": 10,
+          "start": 62.48,
+          "end": 67.58,
+          "lines": [
+            "Poštovani slušalci, u današnjoj emisiji",
+            "razgovaramo sa Mašanom Bogdanovskim,"
+          ]
+        },
+        {
+          "index": 11,
+          "start": 67.58,
+          "end": 71.08,
+          "lines": [
+            "docentom na Filozofskom",
+            "fakultetu u Beogradu."
+          ]
+        },
+        {
+          "index": 12,
+          "start": 72.28,
+          "end": 74.14,
+          "lines": [
+            "Dobrodošli na gozbu. Hvala."
+          ]
+        },
+        {
+          "index": 13,
+          "start": 75.88,
+          "end": 79.3,
+          "lines": [
+            "Razgovaramo o filozofiji Johna Locke,"
+          ]
+        },
+        {
+          "index": 14,
+          "start": 79.3,
+          "end": 83.62,
+          "lines": [
+            "o njegove epistemologiji,",
+            "ali i o epistemologiji religije."
+          ]
+        },
+        {
+          "index": 15,
+          "start": 84.58,
+          "end": 88.54,
+          "lines": [
+            "Ali recite nam pre svega toga,"
+          ]
+        },
+        {
+          "index": 16,
+          "start": 88.54,
+          "end": 92.34,
+          "lines": [
+            "zašto je uopšte John Locke",
+            "značajan za istoriju filozofije,"
+          ]
+        },
+        {
+          "index": 17,
+          "start": 92.34,
+          "end": 94.78,
+          "lines": [
+            "odnosno kako biste vi odredili taj značaj?"
+          ]
+        },
+        {
+          "index": 18,
+          "start": 96.48,
+          "end": 102.64,
+          "lines": [
+            "Svakako da najveći značaj leži u tome",
+            "da je Lok začetnik modernog empirizma."
+          ]
+        },
+        {
+          "index": 19,
+          "start": 102.64,
+          "end": 109.48,
+          "lines": [
+            "Empirizma onako kako ga nalazimo",
+            "u britanskoj školi tog filozofske."
+          ]
+        }
+      ],
+      "lint_violations": 0,
+      "cue_stats": {
+        "count": 19,
+        "total_chars": 987,
+        "mean_cps": 12.26379720526505,
+        "p95_cps": 17.213114754098378,
+        "max_cps": 17.213114754098378,
+        "over_line_pct": 0.0,
+        "over_lines_pct": 0.0,
+        "over_dur_pct": 0.0,
+        "over_cps_pct": 0.0,
+        "under_min_dur_pct": 0.0
+      },
+      "hallucination": {
+        "longest_repeat_n": 2,
+        "longest_repeat_text": "da se",
+        "repetition_collapsed": 0,
+        "silence_dropped": null,
+        "prompt_echo_n": 0,
+        "prompt_echo_text": "",
+        "filler_hits": {
+          "hvala": 1
+        }
+      },
+      "reference_score": null
+    },
+    {
+      "cell_id": "gozba-sample__none__groq-turbo__large-v3__fix",
+      "clip": "fixtures/gozba-sample.mp3",
+      "clip_id": "gozba-sample",
+      "denoise": "none",
+      "engine_requested": "groq-turbo",
+      "model_requested": "large-v3",
+      "device_requested": "cuda",
+      "batch_size": 0,
+      "fix": true,
+      "fix_model": "openai/gpt-4o",
+      "ok": true,
+      "error": "",
+      "wall_s": 9.77565313410014,
+      "peak_rss_mb": 199.3984375,
+      "engine": "groq-turbo",
+      "cached_stages": [
+        "extract",
+        "transcribe",
+        "cues"
+      ],
+      "audio_s": 108.999999488,
+      "decode_s": 1.1352184360148385,
+      "rtf": 0.010414848085754502,
+      "language": "Serbian",
+      "model": "whisper-large-v3-turbo",
+      "model_revision": "hosted",
+      "engine_params": {
+        "language": "sr",
+        "temperature": 0.0,
+        "prompt": true,
+        "repetition_collapsed": 0,
+        "silence_dropped": null
+      },
+      "segments": 11,
+      "fix_report": {
+        "model": "openai/gpt-4o",
+        "batches": 1,
+        "rejected_batches": 0,
+        "changed_cues": 2,
+        "dropped_cues": 0
+      },
+      "text": "Misao Lokove filozofije ukratko izraženo sastoji se u ovome. Da se opšto predstava da se ono što je istinito, to jest da se saznanje zasniva na iskustvu. Propisuje se kao put saznanja s jedne strane iskustvo i posmatranje, a s druge strane analiziranje i isticanje opštih odredaba. To je empirizam koji metafizicira i to predstavlja uobičajeni put u naukama. Ovim Hegelovim rečima o Lokovoj filozofiji, koje je napisao u svojoj istoriji filozofije, započinjemo današnju emisiju. Poštovani slušalci, u današnjoj emisiji razgovaramo sa Mašanom Bogdanovskim, docentom na Filozofskom fakultetu u Beogradu. Dobrodošli na gozbu. Hvala. Razgovaramo o filozofiji Johna Locke, o njegovoj epistemologiji, ali i o epistemologiji religije. Ali recite nam pre svega toga, zašto je uopšte John Locke značajan za istoriju filozofije, odnosno kako biste vi odredili taj značaj? Svakako da najveći značaj leži u tome da je Lok začetnik modernog empirizma. Empirizma onako kako ga nalazimo u britanskoj školi tog filozofske.",
+      "cues": [
+        {
+          "index": 1,
+          "start": 6.84,
+          "end": 11.18,
+          "lines": [
+            "Misao Lokove filozofije ukratko",
+            "izraženo sastoji se u ovome."
+          ]
+        },
+        {
+          "index": 2,
+          "start": 12.38,
+          "end": 16.4,
+          "lines": [
+            "Da se opšto predstava",
+            "da se ono što je istinito,"
+          ]
+        },
+        {
+          "index": 3,
+          "start": 16.4,
+          "end": 20.3,
+          "lines": [
+            "to jest",
+            "da se saznanje zasniva na iskustvu."
+          ]
+        },
+        {
+          "index": 4,
+          "start": 21.28,
+          "end": 27.06,
+          "lines": [
+            "Propisuje se kao put saznanja s jedne",
+            "strane iskustvo i posmatranje,"
+          ]
+        },
+        {
+          "index": 5,
+          "start": 27.06,
+          "end": 32.36,
+          "lines": [
+            "a s druge strane analiziranje",
+            "i isticanje opštih odredaba."
+          ]
+        },
+        {
+          "index": 6,
+          "start": 33.38,
+          "end": 36.44,
+          "lines": [
+            "To je empirizam koji metafizicira"
+          ]
+        },
+        {
+          "index": 7,
+          "start": 36.44,
+          "end": 41.36,
+          "lines": [
+            "i to predstavlja uobičajeni put u naukama."
+          ]
+        },
+        {
+          "index": 8,
+          "start": 43.86,
+          "end": 48.8,
+          "lines": [
+            "Ovim Hegelovim rečima",
+            "o Lokovoj filozofiji,"
+          ]
+        },
+        {
+          "index": 9,
+          "start": 48.8,
+          "end": 53.34,
+          "lines": [
+            "koje je napisao u svojoj istoriji",
+            "filozofije, započinjemo današnju emisiju."
+          ]
+        },
+        {
+          "index": 10,
+          "start": 62.48,
+          "end": 67.58,
+          "lines": [
+            "Poštovani slušalci, u današnjoj emisiji",
+            "razgovaramo sa Mašanom Bogdanovskim,"
+          ]
+        },
+        {
+          "index": 11,
+          "start": 67.58,
+          "end": 71.08,
+          "lines": [
+            "docentom na Filozofskom",
+            "fakultetu u Beogradu."
+          ]
+        },
+        {
+          "index": 12,
+          "start": 72.28,
+          "end": 74.14,
+          "lines": [
+            "Dobrodošli na gozbu. Hvala."
+          ]
+        },
+        {
+          "index": 13,
+          "start": 75.88,
+          "end": 79.3,
+          "lines": [
+            "Razgovaramo o filozofiji Johna Locke,"
+          ]
+        },
+        {
+          "index": 14,
+          "start": 79.3,
+          "end": 83.62,
+          "lines": [
+            "o njegovoj epistemologiji,",
+            "ali i o epistemologiji religije."
+          ]
+        },
+        {
+          "index": 15,
+          "start": 84.58,
+          "end": 88.54,
+          "lines": [
+            "Ali recite nam pre svega toga,"
+          ]
+        },
+        {
+          "index": 16,
+          "start": 88.54,
+          "end": 92.34,
+          "lines": [
+            "zašto je uopšte John Locke",
+            "značajan za istoriju filozofije,"
+          ]
+        },
+        {
+          "index": 17,
+          "start": 92.34,
+          "end": 94.78,
+          "lines": [
+            "odnosno kako biste vi odredili taj značaj?"
+          ]
+        },
+        {
+          "index": 18,
+          "start": 96.48,
+          "end": 102.64,
+          "lines": [
+            "Svakako da najveći značaj leži u tome",
+            "da je Lok začetnik modernog empirizma."
+          ]
+        },
+        {
+          "index": 19,
+          "start": 102.64,
+          "end": 109.48,
+          "lines": [
+            "Empirizma onako kako ga nalazimo",
+            "u britanskoj školi tog filozofske."
+          ]
+        }
+      ],
+      "lint_violations": 0,
+      "cue_stats": {
+        "count": 19,
+        "total_chars": 988,
+        "mean_cps": 12.275980441132496,
+        "p95_cps": 17.213114754098378,
+        "max_cps": 17.213114754098378,
+        "over_line_pct": 0.0,
+        "over_lines_pct": 0.0,
+        "over_dur_pct": 0.0,
+        "over_cps_pct": 0.0,
+        "under_min_dur_pct": 0.0
+      },
+      "hallucination": {
+        "longest_repeat_n": 2,
+        "longest_repeat_text": "da se",
+        "repetition_collapsed": 0,
+        "silence_dropped": null,
+        "prompt_echo_n": 0,
+        "prompt_echo_text": "",
+        "filler_hits": {
+          "hvala": 1
+        }
+      },
+      "reference_score": null,
+      "fix_change_rate": 0.013157894736842105
+    },
+    {
+      "cell_id": "uvod-u-pravo__none__faster-whisper__large-v3__nofix",
+      "clip": "fixtures/uvod-u-pravo.m4a",
+      "clip_id": "uvod-u-pravo",
+      "denoise": "none",
+      "engine_requested": "faster-whisper",
+      "model_requested": "large-v3",
+      "device_requested": "cuda",
+      "batch_size": 0,
+      "fix": false,
+      "fix_model": "",
+      "ok": true,
+      "error": "",
+      "wall_s": 10.38158512499649,
+      "peak_rss_mb": 3386.12109375,
+      "engine": "faster-whisper",
+      "cached_stages": [
+        "extract"
+      ],
+      "audio_s": 164.4573125,
+      "decode_s": 7.317079290980473,
+      "rtf": 0.04449227084980167,
+      "language": "sr",
+      "model": "large-v3",
+      "model_revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "engine_params": {
+        "language": "sr",
+        "beam_size": 5,
+        "temperature": 0.0,
+        "vad": true,
+        "device": "cuda",
+        "compute_type": "float16",
+        "batch_size": 0,
+        "initial_prompt": true,
+        "cuda_fallback": null,
+        "seed": 20260101,
+        "repetition_collapsed": 0,
+        "silence_dropped": 0
+      },
+      "segments": 14,
+      "fix_report": null,
+      "text": "Imamo pravna pravila koja su ona pravila koja imaju uređenu funkcionisane države i pomenuli smo dva osnovna principa funkcionisane države koja su podlana čelo subordinacija i koordinacija. Subordinacija je odnos nadređenosti i podređenosti koju imamo državno dajem na različitom stepenu vlasti. A kod koordinacije imamo isti stepen vlasti i imamo sarari. To je ono što smo prošlog puta radili i gde smo se, jel da, zaustavili. Sada idemo dalje. Dakle, kada je reč o ljudima, premaćemo sa ljudima da vidimo koji to ljudi rade, šta rade, kako rade i kakav je njihov odnos prema državi kao organizaciju. Dakle, državu kao organizaciju ne čine svi građani, ne čini svostavni liško. Znači taj državni aparat čine samo neke ljudi. Ti ljudi koji čine taj državni aparat, oni se nazivaju državnim službenim licima. Dakle, to su ljudi koji rade u imenu za računom državu. E sad, tim državnim službenim licima se daju određene poslove. Dakle, imate potređenu državnu službenu lice, date mu da rade neki posao i taj posao predstavlja njegovu radu. Ja se obudim da vam što jednostavnije objasnim, ne da se držim ti definicije službenika, nego najprostije moguće da vam objasnim. Dakle, uzmeš neki posao, daš ga jednom državnom tvornom ulicu i kažeš evo ti, napravo radi to, to je tvoja nadležnost, bukvalno tako. E sada, postoje dve vrste nadležnosti u principu i ova treća nekako funkcionalna, to je uopšte nije zakonska kategorija, ali se često spominje, pa ćemo nju objasniti, i prisutna je naravno u radu državnih ordana, Ali nije zakonska kategorija. Da krenemo od stvarne, dakle, ako uzmete recimo jednog sudija koji je državno službeno lice, jednog narodnog poslanika koji je državno službeno lice, da li oni rade isti?",
+      "cues": [
+        {
+          "index": 1,
+          "start": 0.59,
+          "end": 5.71,
+          "lines": [
+            "Imamo pravna pravila koja su ona pravila"
+          ]
+        },
+        {
+          "index": 2,
+          "start": 5.71,
+          "end": 8.35,
+          "lines": [
+            "koja imaju uređenu funkcionisane države"
+          ]
+        },
+        {
+          "index": 3,
+          "start": 8.35,
+          "end": 14.89,
+          "lines": [
+            "i pomenuli smo dva osnovna",
+            "principa funkcionisane države"
+          ]
+        },
+        {
+          "index": 4,
+          "start": 14.89,
+          "end": 19.59,
+          "lines": [
+            "koja su podlana čelo subordinacija",
+            "i koordinacija."
+          ]
+        },
+        {
+          "index": 5,
+          "start": 20.29,
+          "end": 23.03,
+          "lines": [
+            "Subordinacija je odnos nadređenosti"
+          ]
+        },
+        {
+          "index": 6,
+          "start": 23.03,
+          "end": 29.37,
+          "lines": [
+            "i podređenosti koju imamo državno",
+            "dajem na različitom stepenu vlasti."
+          ]
+        },
+        {
+          "index": 7,
+          "start": 29.37,
+          "end": 34.91,
+          "lines": [
+            "A kod koordinacije",
+            "imamo isti stepen vlasti"
+          ]
+        },
+        {
+          "index": 8,
+          "start": 34.91,
+          "end": 36.83,
+          "lines": [
+            "i imamo sarari."
+          ]
+        },
+        {
+          "index": 9,
+          "start": 37.03,
+          "end": 43.99,
+          "lines": [
+            "To je ono što smo prošlog puta radili",
+            "i gde smo se, jel da, zaustavili."
+          ]
+        },
+        {
+          "index": 10,
+          "start": 43.99,
+          "end": 46.23,
+          "lines": [
+            "Sada idemo dalje."
+          ]
+        },
+        {
+          "index": 11,
+          "start": 47.25,
+          "end": 50.57,
+          "lines": [
+            "Dakle, kada je reč o ljudima,"
+          ]
+        },
+        {
+          "index": 12,
+          "start": 50.71,
+          "end": 54.61,
+          "lines": [
+            "premaćemo sa ljudima",
+            "da vidimo koji to ljudi rade,"
+          ]
+        },
+        {
+          "index": 13,
+          "start": 54.73,
+          "end": 60.91,
+          "lines": [
+            "šta rade, kako rade i kakav je njihov",
+            "odnos prema državi kao organizaciju."
+          ]
+        },
+        {
+          "index": 14,
+          "start": 61.47,
+          "end": 67.11,
+          "lines": [
+            "Dakle, državu kao organizaciju",
+            "ne čine svi građani,"
+          ]
+        },
+        {
+          "index": 15,
+          "start": 67.21,
+          "end": 69.11,
+          "lines": [
+            "ne čini svostavni liško."
+          ]
+        },
+        {
+          "index": 16,
+          "start": 69.11,
+          "end": 75.33,
+          "lines": [
+            "Znači taj državni aparat čine",
+            "samo neke ljudi. Ti ljudi"
+          ]
+        },
+        {
+          "index": 17,
+          "start": 75.33,
+          "end": 77.75,
+          "lines": [
+            "koji čine taj državni aparat,"
+          ]
+        },
+        {
+          "index": 18,
+          "start": 77.83,
+          "end": 81.81,
+          "lines": [
+            "oni se nazivaju državnim službenim licima."
+          ]
+        },
+        {
+          "index": 19,
+          "start": 82.11,
+          "end": 87.21,
+          "lines": [
+            "Dakle, to su ljudi",
+            "koji rade u imenu za računom državu."
+          ]
+        },
+        {
+          "index": 20,
+          "start": 87.73,
+          "end": 89.53,
+          "lines": [
+            "E sad,"
+          ]
+        },
+        {
+          "index": 21,
+          "start": 89.77,
+          "end": 95.61,
+          "lines": [
+            "tim državnim službenim",
+            "licima se daju određene poslove."
+          ]
+        },
+        {
+          "index": 22,
+          "start": 95.61,
+          "end": 100.91,
+          "lines": [
+            "Dakle,",
+            "imate potređenu državnu službenu lice,"
+          ]
+        },
+        {
+          "index": 23,
+          "start": 101.09,
+          "end": 107.47,
+          "lines": [
+            "date mu da rade neki posao",
+            "i taj posao predstavlja njegovu radu."
+          ]
+        },
+        {
+          "index": 24,
+          "start": 107.47,
+          "end": 112.19,
+          "lines": [
+            "Ja se obudim",
+            "da vam što jednostavnije objasnim,"
+          ]
+        },
+        {
+          "index": 25,
+          "start": 112.29,
+          "end": 119.27,
+          "lines": [
+            "ne da se držim ti definicije službenika,",
+            "nego najprostije moguće da vam objasnim."
+          ]
+        },
+        {
+          "index": 26,
+          "start": 119.27,
+          "end": 124.83,
+          "lines": [
+            "Dakle, uzmeš neki posao, daš ga jednom",
+            "državnom tvornom ulicu i kažeš evo ti,"
+          ]
+        },
+        {
+          "index": 27,
+          "start": 124.97,
+          "end": 130.13,
+          "lines": [
+            "napravo radi to,",
+            "to je tvoja nadležnost, bukvalno tako."
+          ]
+        },
+        {
+          "index": 28,
+          "start": 131.01,
+          "end": 137.53,
+          "lines": [
+            "E sada, postoje dve vrste nadležnosti u",
+            "principu i ova treća nekako funkcionalna,"
+          ]
+        },
+        {
+          "index": 29,
+          "start": 137.59,
+          "end": 140.11,
+          "lines": [
+            "to je uopšte nije zakonska kategorija,"
+          ]
+        },
+        {
+          "index": 30,
+          "start": 140.17,
+          "end": 144.01,
+          "lines": [
+            "ali se često spominje,",
+            "pa ćemo nju objasniti,"
+          ]
+        },
+        {
+          "index": 31,
+          "start": 144.07,
+          "end": 147.17,
+          "lines": [
+            "i prisutna je naravno",
+            "u radu državnih ordana,"
+          ]
+        },
+        {
+          "index": 32,
+          "start": 147.17,
+          "end": 149.67,
+          "lines": [
+            "Ali nije zakonska kategorija."
+          ]
+        },
+        {
+          "index": 33,
+          "start": 150.13,
+          "end": 152.81,
+          "lines": [
+            "Da krenemo od stvarne, dakle,"
+          ]
+        },
+        {
+          "index": 34,
+          "start": 152.81,
+          "end": 158.57,
+          "lines": [
+            "ako uzmete recimo jednog sudija",
+            "koji je državno službeno lice,"
+          ]
+        },
+        {
+          "index": 35,
+          "start": 158.63,
+          "end": 164.43,
+          "lines": [
+            "jednog narodnog poslanika koji je državno",
+            "službeno lice, da li oni rade isti?"
+          ]
+        }
+      ],
+      "lint_violations": 0,
+      "cue_stats": {
+        "count": 35,
+        "total_chars": 1680,
+        "mean_cps": 10.677596600525296,
+        "p95_cps": 14.772727272727275,
+        "max_cps": 15.079365079365019,
+        "over_line_pct": 0.0,
+        "over_lines_pct": 0.0,
+        "over_dur_pct": 0.0,
+        "over_cps_pct": 0.0,
+        "under_min_dur_pct": 0.0
+      },
+      "hallucination": {
+        "longest_repeat_n": 5,
+        "longest_repeat_text": "koji je državno službeno lice",
+        "repetition_collapsed": 0,
+        "silence_dropped": 0,
+        "prompt_echo_n": 0,
+        "prompt_echo_text": "",
+        "filler_hits": {}
+      },
+      "reference_score": null
+    },
+    {
+      "cell_id": "uvod-u-pravo__none__faster-whisper__large-v3__fix",
+      "clip": "fixtures/uvod-u-pravo.m4a",
+      "clip_id": "uvod-u-pravo",
+      "denoise": "none",
+      "engine_requested": "faster-whisper",
+      "model_requested": "large-v3",
+      "device_requested": "cuda",
+      "batch_size": 0,
+      "fix": true,
+      "fix_model": "openai/gpt-4o",
+      "ok": true,
+      "error": "",
+      "wall_s": 10.760452736984007,
+      "peak_rss_mb": 231.578125,
+      "engine": "faster-whisper",
+      "cached_stages": [
+        "extract",
+        "transcribe",
+        "cues"
+      ],
+      "audio_s": 164.4573125,
+      "decode_s": 7.317079290980473,
+      "rtf": 0.04449227084980167,
+      "language": "sr",
+      "model": "large-v3",
+      "model_revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "engine_params": {
+        "language": "sr",
+        "beam_size": 5,
+        "temperature": 0.0,
+        "vad": true,
+        "device": "cuda",
+        "compute_type": "float16",
+        "batch_size": 0,
+        "initial_prompt": true,
+        "cuda_fallback": null,
+        "seed": 20260101,
+        "repetition_collapsed": 0,
+        "silence_dropped": 0
+      },
+      "segments": 14,
+      "fix_report": {
+        "model": "openai/gpt-4o",
+        "batches": 1,
+        "rejected_batches": 0,
+        "changed_cues": 21,
+        "dropped_cues": 0
+      },
+      "text": "Imamo pravna pravila koja su ona pravila koja imaju uređeno funkcionisanje države i pomenuli smo dva osnovna principa funkcionisanja države koja su podložna čelima subordinacije i koordinacije. Subordinacija je odnos nadređenosti i podređenosti koji imamo u državnom daju na različitim stepenima vlasti. A kod koordinacije imamo isti stepen vlasti i imamo saradnju. To je ono što smo prošlog puta radili i gde smo se, jel da, zaustavili. Sada idemo dalje. Dakle, kada je reč o ljudima, pravimo se sa ljudima da vidimo koji to ljudi rade, šta rade, kako rade i kakav je njihov odnos prema državi kao organizaciji. Dakle, državu kao organizaciju ne čine svi građani, ne čini svaki lički. Znači taj državni aparat čine samo neki ljudi. Ti ljudi koji čine taj državni aparat, oni se nazivaju državnim službenim licima. Dakle, to su ljudi koji rade u ime i za račun države. E sad, tim državnim službenim licima se daju određeni poslovi. Dakle, imate potrebu za državnim službenim licem, date mu da radi neki posao i taj posao predstavlja njegovu radnu. Ja se trudim da vam što jednostavnije objasnim, ne da se držim tih definicija službenika, nego najprostije moguće da vam objasnim. Dakle, uzmeš neki posao, daš ga jednom državnom službenom licu i kažeš evo ti, napravi, radi to, to je tvoja nadležnost, bukvalno tako. E sada, postoje dve vrste nadležnosti u principu i ova treća nekako funkcionalna, to uopšte nije zakonska kategorija, ali se često spominje, pa ćemo nju objasniti, i prisutna je naravno u radu državnih organa, Ali nije zakonska kategorija. Da krenemo od stvarne, dakle, ako uzmete recimo jednog sudiju koji je državno službeno lice, jednog narodnog poslanika koji je državno službeno lice, da li oni rade isto?",
+      "cues": [
+        {
+          "index": 1,
+          "start": 0.59,
+          "end": 5.71,
+          "lines": [
+            "Imamo pravna pravila koja su ona pravila"
+          ]
+        },
+        {
+          "index": 2,
+          "start": 5.71,
+          "end": 8.35,
+          "lines": [
+            "koja imaju uređeno funkcionisanje države"
+          ]
+        },
+        {
+          "index": 3,
+          "start": 8.35,
+          "end": 14.89,
+          "lines": [
+            "i pomenuli smo dva osnovna",
+            "principa funkcionisanja države"
+          ]
+        },
+        {
+          "index": 4,
+          "start": 14.89,
+          "end": 19.59,
+          "lines": [
+            "koja su podložna čelima subordinacije",
+            "i koordinacije."
+          ]
+        },
+        {
+          "index": 5,
+          "start": 20.29,
+          "end": 23.03,
+          "lines": [
+            "Subordinacija je odnos nadređenosti"
+          ]
+        },
+        {
+          "index": 6,
+          "start": 23.03,
+          "end": 29.37,
+          "lines": [
+            "i podređenosti koji imamo u državnom",
+            "daju na različitim stepenima vlasti."
+          ]
+        },
+        {
+          "index": 7,
+          "start": 29.37,
+          "end": 34.91,
+          "lines": [
+            "A kod koordinacije",
+            "imamo isti stepen vlasti"
+          ]
+        },
+        {
+          "index": 8,
+          "start": 34.91,
+          "end": 36.83,
+          "lines": [
+            "i imamo saradnju."
+          ]
+        },
+        {
+          "index": 9,
+          "start": 37.03,
+          "end": 43.99,
+          "lines": [
+            "To je ono što smo prošlog puta radili",
+            "i gde smo se, jel da, zaustavili."
+          ]
+        },
+        {
+          "index": 10,
+          "start": 43.99,
+          "end": 46.23,
+          "lines": [
+            "Sada idemo dalje."
+          ]
+        },
+        {
+          "index": 11,
+          "start": 47.25,
+          "end": 50.57,
+          "lines": [
+            "Dakle, kada je reč o ljudima,"
+          ]
+        },
+        {
+          "index": 12,
+          "start": 50.71,
+          "end": 54.61,
+          "lines": [
+            "pravimo se sa ljudima",
+            "da vidimo koji to ljudi rade,"
+          ]
+        },
+        {
+          "index": 13,
+          "start": 54.73,
+          "end": 60.91,
+          "lines": [
+            "šta rade, kako rade i kakav je njihov",
+            "odnos prema državi kao organizaciji."
+          ]
+        },
+        {
+          "index": 14,
+          "start": 61.47,
+          "end": 67.11,
+          "lines": [
+            "Dakle, državu kao organizaciju",
+            "ne čine svi građani,"
+          ]
+        },
+        {
+          "index": 15,
+          "start": 67.21,
+          "end": 69.11,
+          "lines": [
+            "ne čini svaki lički."
+          ]
+        },
+        {
+          "index": 16,
+          "start": 69.11,
+          "end": 75.33,
+          "lines": [
+            "Znači taj državni aparat čine",
+            "samo neki ljudi. Ti ljudi"
+          ]
+        },
+        {
+          "index": 17,
+          "start": 75.33,
+          "end": 77.75,
+          "lines": [
+            "koji čine taj državni aparat,"
+          ]
+        },
+        {
+          "index": 18,
+          "start": 77.83,
+          "end": 81.81,
+          "lines": [
+            "oni se nazivaju državnim službenim licima."
+          ]
+        },
+        {
+          "index": 19,
+          "start": 82.11,
+          "end": 87.21,
+          "lines": [
+            "Dakle, to su ljudi",
+            "koji rade u ime i za račun države."
+          ]
+        },
+        {
+          "index": 20,
+          "start": 87.73,
+          "end": 89.53,
+          "lines": [
+            "E sad,"
+          ]
+        },
+        {
+          "index": 21,
+          "start": 89.77,
+          "end": 95.61,
+          "lines": [
+            "tim državnim službenim",
+            "licima se daju određeni poslovi."
+          ]
+        },
+        {
+          "index": 22,
+          "start": 95.61,
+          "end": 100.91,
+          "lines": [
+            "Dakle,",
+            "imate potrebu za državnim službenim licem,"
+          ]
+        },
+        {
+          "index": 23,
+          "start": 101.09,
+          "end": 107.47,
+          "lines": [
+            "date mu da radi neki posao",
+            "i taj posao predstavlja njegovu radnu."
+          ]
+        },
+        {
+          "index": 24,
+          "start": 107.47,
+          "end": 112.19,
+          "lines": [
+            "Ja se trudim",
+            "da vam što jednostavnije objasnim,"
+          ]
+        },
+        {
+          "index": 25,
+          "start": 112.29,
+          "end": 119.27,
+          "lines": [
+            "ne da se držim tih definicija službenika,",
+            "nego najprostije moguće da vam objasnim."
+          ]
+        },
+        {
+          "index": 26,
+          "start": 119.27,
+          "end": 124.83,
+          "lines": [
+            "Dakle, uzmeš neki posao, daš ga jednom",
+            "državnom službenom licu i kažeš evo ti,"
+          ]
+        },
+        {
+          "index": 27,
+          "start": 124.97,
+          "end": 130.13,
+          "lines": [
+            "napravi, radi to,",
+            "to je tvoja nadležnost, bukvalno tako."
+          ]
+        },
+        {
+          "index": 28,
+          "start": 131.01,
+          "end": 137.53,
+          "lines": [
+            "E sada, postoje dve vrste nadležnosti u",
+            "principu i ova treća nekako funkcionalna,"
+          ]
+        },
+        {
+          "index": 29,
+          "start": 137.59,
+          "end": 140.11,
+          "lines": [
+            "to uopšte nije zakonska kategorija,"
+          ]
+        },
+        {
+          "index": 30,
+          "start": 140.17,
+          "end": 144.01,
+          "lines": [
+            "ali se često spominje,",
+            "pa ćemo nju objasniti,"
+          ]
+        },
+        {
+          "index": 31,
+          "start": 144.07,
+          "end": 147.17,
+          "lines": [
+            "i prisutna je naravno",
+            "u radu državnih organa,"
+          ]
+        },
+        {
+          "index": 32,
+          "start": 147.17,
+          "end": 149.67,
+          "lines": [
+            "Ali nije zakonska kategorija."
+          ]
+        },
+        {
+          "index": 33,
+          "start": 150.13,
+          "end": 152.81,
+          "lines": [
+            "Da krenemo od stvarne, dakle,"
+          ]
+        },
+        {
+          "index": 34,
+          "start": 152.81,
+          "end": 158.57,
+          "lines": [
+            "ako uzmete recimo jednog sudiju",
+            "koji je državno službeno lice,"
+          ]
+        },
+        {
+          "index": 35,
+          "start": 158.63,
+          "end": 164.43,
+          "lines": [
+            "jednog narodnog poslanika koji je državno",
+            "službeno lice, da li oni rade isto?"
+          ]
+        }
+      ],
+      "lint_violations": 0,
+      "cue_stats": {
+        "count": 35,
+        "total_chars": 1691,
+        "mean_cps": 10.701581295433119,
+        "p95_cps": 14.51612903225809,
+        "max_cps": 15.151515151515154,
+        "over_line_pct": 0.0,
+        "over_lines_pct": 0.0,
+        "over_dur_pct": 0.0,
+        "over_cps_pct": 0.0,
+        "under_min_dur_pct": 0.0
+      },
+      "hallucination": {
+        "longest_repeat_n": 5,
+        "longest_repeat_text": "koji je državno službeno lice",
+        "repetition_collapsed": 0,
+        "silence_dropped": 0,
+        "prompt_echo_n": 0,
+        "prompt_echo_text": "",
+        "filler_hits": {}
+      },
+      "reference_score": null,
+      "fix_change_rate": 0.15357142857142858
+    },
+    {
+      "cell_id": "uvod-u-pravo__none__groq-turbo__large-v3__nofix",
+      "clip": "fixtures/uvod-u-pravo.m4a",
+      "clip_id": "uvod-u-pravo",
+      "denoise": "none",
+      "engine_requested": "groq-turbo",
+      "model_requested": "large-v3",
+      "device_requested": "cuda",
+      "batch_size": 0,
+      "fix": false,
+      "fix_model": "",
+      "ok": true,
+      "error": "",
+      "wall_s": 1.3371923259692267,
+      "peak_rss_mb": 51.4609375,
+      "engine": "groq-turbo",
+      "cached_stages": [
+        "extract"
+      ],
+      "audio_s": 164.437968756,
+      "decode_s": 1.141498732031323,
+      "rtf": 0.0069418197066465044,
+      "language": "Serbian",
+      "model": "whisper-large-v3-turbo",
+      "model_revision": "hosted",
+      "engine_params": {
+        "language": "sr",
+        "temperature": 0.0,
+        "prompt": true,
+        "repetition_collapsed": 0,
+        "silence_dropped": null
+      },
+      "segments": 12,
+      "fix_report": null,
+      "text": "Imamo prosopiske primude, imamo pravna pravila, to su ona pravila koje imaju uređenu funkcionisani države i omenuli smo dva osnovna principa funkcionisani države koja su pozvana čeo subordinacija i koordinacija. Subordinacija i odnos nadređenosti i podređenosti, tu imamo državne grane na različitom stepenu vlasti. A kod koordinacije imamo isti stepen vlasti i imamo saradit. To je ono što smo prošlog puta radili i gdje smo sve zaustavili. Sada idemo dalje. Kada je reč o ljudima, krenut ćemo sa ljudima da vidimo koji to ljudi rade, šta rade, kako rade i kakav je njihov odnos. prema državi kao organizaciju. Dakle, državu kao organizaciju ne čine svi građani, ne čini svojstavništvo. Taj državni aparat čine samo neki ljudi. Ti ljudi koji čine taj državni aparat, oni se nazivaju državni u službenim licima. Dakle, to su ljudi koji rade u ime za računom državu. E sad, tim državnim službenim licima se daju određene poslovi. Zadrži imate određeno državno službeno lice, dajte mu da rade neki posao i taj posao predstavlja njegovu naravljaju. Ja se kudim dakle da vam što jednostavnije objasnim. Ne da se držim tih definicija izučbenika, nego najprostije je moguće da vam objasnim. Uzmeš neki posao, daš ga jednom državnom služnom oblicu i dažeš evo ti na radi to. To je tvoja nadležnost. E sada, postoje dve vrste nadležnosti u principu i ova treća nekakva funkcionalna, to je uopšte nije zakonska kategorija, ali se često spominje, pa ćemo nju objasniti, i prisutna je naravno u radu državnih podana, Ali nije zakonska kategorija. Da krenemo od stvarne, dakle, ako uzmete recimo jednog sudiju koji je državno službno novice, jednog narodnog poslanika koji je državno službno novice, da li oni radi isti?",
+      "cues": [
+        {
+          "index": 1,
+          "start": 0.0,
+          "end": 4.66,
+          "lines": [
+            "Imamo prosopiske primude,",
+            "imamo pravna pravila,"
+          ]
+        },
+        {
+          "index": 2,
+          "start": 4.66,
+          "end": 8.42,
+          "lines": [
+            "to su ona pravila",
+            "koje imaju uređenu funkcionisani države"
+          ]
+        },
+        {
+          "index": 3,
+          "start": 8.42,
+          "end": 14.94,
+          "lines": [
+            "i omenuli smo dva osnovna",
+            "principa funkcionisani države"
+          ]
+        },
+        {
+          "index": 4,
+          "start": 14.94,
+          "end": 20.22,
+          "lines": [
+            "koja su pozvana čeo subordinacija",
+            "i koordinacija."
+          ]
+        },
+        {
+          "index": 5,
+          "start": 20.2,
+          "end": 24.8,
+          "lines": [
+            "Subordinacija i odnos nadređenosti",
+            "i podređenosti,"
+          ]
+        },
+        {
+          "index": 6,
+          "start": 24.8,
+          "end": 29.48,
+          "lines": [
+            "tu imamo državne grane",
+            "na različitom stepenu vlasti."
+          ]
+        },
+        {
+          "index": 7,
+          "start": 30.74,
+          "end": 37.12,
+          "lines": [
+            "A kod koordinacije imamo isti",
+            "stepen vlasti i imamo saradit."
+          ]
+        },
+        {
+          "index": 8,
+          "start": 37.12,
+          "end": 40.94,
+          "lines": [
+            "To je ono što smo prošlog puta radili"
+          ]
+        },
+        {
+          "index": 9,
+          "start": 40.94,
+          "end": 44.24,
+          "lines": [
+            "i gdje smo sve zaustavili."
+          ]
+        },
+        {
+          "index": 10,
+          "start": 44.08,
+          "end": 46.38,
+          "lines": [
+            "Sada idemo dalje."
+          ]
+        },
+        {
+          "index": 11,
+          "start": 46.38,
+          "end": 50.94,
+          "lines": [
+            "Kada je reč o ljudima,"
+          ]
+        },
+        {
+          "index": 12,
+          "start": 50.94,
+          "end": 54.82,
+          "lines": [
+            "krenut ćemo sa ljudima",
+            "da vidimo koji to ljudi rade,"
+          ]
+        },
+        {
+          "index": 13,
+          "start": 54.82,
+          "end": 58.62,
+          "lines": [
+            "šta rade,",
+            "kako rade i kakav je njihov odnos."
+          ]
+        },
+        {
+          "index": 14,
+          "start": 58.26,
+          "end": 61.56,
+          "lines": [
+            "prema državi kao organizaciju."
+          ]
+        },
+        {
+          "index": 15,
+          "start": 61.56,
+          "end": 67.26,
+          "lines": [
+            "Dakle, državu kao organizaciju",
+            "ne čine svi građani,"
+          ]
+        },
+        {
+          "index": 16,
+          "start": 67.26,
+          "end": 69.34,
+          "lines": [
+            "ne čini svojstavništvo."
+          ]
+        },
+        {
+          "index": 17,
+          "start": 69.24,
+          "end": 75.4,
+          "lines": [
+            "Taj državni aparat čine",
+            "samo neki ljudi. Ti ljudi"
+          ]
+        },
+        {
+          "index": 18,
+          "start": 75.4,
+          "end": 77.96,
+          "lines": [
+            "koji čine taj državni aparat,"
+          ]
+        },
+        {
+          "index": 19,
+          "start": 77.96,
+          "end": 81.96,
+          "lines": [
+            "oni se nazivaju državni",
+            "u službenim licima."
+          ]
+        },
+        {
+          "index": 20,
+          "start": 83.06,
+          "end": 87.709,
+          "lines": [
+            "Dakle, to su ljudi",
+            "koji rade u ime za računom državu."
+          ]
+        },
+        {
+          "index": 21,
+          "start": 89.329,
+          "end": 95.909,
+          "lines": [
+            "E sad, tim državnim službenim",
+            "licima se daju određene poslovi."
+          ]
+        },
+        {
+          "index": 22,
+          "start": 96.249,
+          "end": 101.609,
+          "lines": [
+            "Zadrži imate određeno",
+            "državno službeno lice,"
+          ]
+        },
+        {
+          "index": 23,
+          "start": 101.609,
+          "end": 107.749,
+          "lines": [
+            "dajte mu da rade neki posao i taj",
+            "posao predstavlja njegovu naravljaju."
+          ]
+        },
+        {
+          "index": 24,
+          "start": 107.669,
+          "end": 112.409,
+          "lines": [
+            "Ja se kudim dakle",
+            "da vam što jednostavnije objasnim."
+          ]
+        },
+        {
+          "index": 25,
+          "start": 112.409,
+          "end": 116.729,
+          "lines": [
+            "Ne da se držim tih definicija izučbenika,"
+          ]
+        },
+        {
+          "index": 26,
+          "start": 116.729,
+          "end": 119.389,
+          "lines": [
+            "nego najprostije je moguće",
+            "da vam objasnim."
+          ]
+        },
+        {
+          "index": 27,
+          "start": 119.429,
+          "end": 121.369,
+          "lines": [
+            "Uzmeš neki posao,"
+          ]
+        },
+        {
+          "index": 28,
+          "start": 121.369,
+          "end": 127.329,
+          "lines": [
+            "daš ga jednom državnom služnom oblicu",
+            "i dažeš evo ti na radi to."
+          ]
+        },
+        {
+          "index": 29,
+          "start": 127.329,
+          "end": 129.409,
+          "lines": [
+            "To je tvoja nadležnost."
+          ]
+        },
+        {
+          "index": 30,
+          "start": 131.329,
+          "end": 137.669,
+          "lines": [
+            "E sada, postoje dve vrste nadležnosti u",
+            "principu i ova treća nekakva funkcionalna,"
+          ]
+        },
+        {
+          "index": 31,
+          "start": 137.669,
+          "end": 140.329,
+          "lines": [
+            "to je uopšte nije zakonska kategorija,"
+          ]
+        },
+        {
+          "index": 32,
+          "start": 140.329,
+          "end": 144.169,
+          "lines": [
+            "ali se često spominje,",
+            "pa ćemo nju objasniti,"
+          ]
+        },
+        {
+          "index": 33,
+          "start": 144.169,
+          "end": 147.469,
+          "lines": [
+            "i prisutna je naravno",
+            "u radu državnih podana,"
+          ]
+        },
+        {
+          "index": 34,
+          "start": 147.909,
+          "end": 150.329,
+          "lines": [
+            "Ali nije zakonska kategorija."
+          ]
+        },
+        {
+          "index": 35,
+          "start": 150.329,
+          "end": 152.869,
+          "lines": [
+            "Da krenemo od stvarne, dakle,"
+          ]
+        },
+        {
+          "index": 36,
+          "start": 152.869,
+          "end": 158.709,
+          "lines": [
+            "ako uzmete recimo jednog sudiju",
+            "koji je državno službno novice,"
+          ]
+        },
+        {
+          "index": 37,
+          "start": 158.709,
+          "end": 164.909,
+          "lines": [
+            "jednog narodnog poslanika koji je državno",
+            "službno novice, da li oni radi isti?"
+          ]
+        }
+      ],
+      "lint_violations": 5,
+      "cue_stats": {
+        "count": 37,
+        "total_chars": 1672,
+        "mean_cps": 10.685430823622934,
+        "p95_cps": 15.159574468085108,
+        "max_cps": 16.165413533834606,
+        "over_line_pct": 0.0,
+        "over_lines_pct": 0.0,
+        "over_dur_pct": 0.0,
+        "over_cps_pct": 0.0,
+        "under_min_dur_pct": 0.0
+      },
+      "hallucination": {
+        "longest_repeat_n": 5,
+        "longest_repeat_text": "koji je državno službno novice",
+        "repetition_collapsed": 0,
+        "silence_dropped": null,
+        "prompt_echo_n": 0,
+        "prompt_echo_text": "",
+        "filler_hits": {}
+      },
+      "reference_score": null
+    },
+    {
+      "cell_id": "uvod-u-pravo__none__groq-turbo__large-v3__fix",
+      "clip": "fixtures/uvod-u-pravo.m4a",
+      "clip_id": "uvod-u-pravo",
+      "denoise": "none",
+      "engine_requested": "groq-turbo",
+      "model_requested": "large-v3",
+      "device_requested": "cuda",
+      "batch_size": 0,
+      "fix": true,
+      "fix_model": "openai/gpt-4o",
+      "ok": true,
+      "error": "",
+      "wall_s": 13.059388382011093,
+      "peak_rss_mb": 199.375,
+      "engine": "groq-turbo",
+      "cached_stages": [
+        "extract",
+        "transcribe",
+        "cues"
+      ],
+      "audio_s": 164.437968756,
+      "decode_s": 1.141498732031323,
+      "rtf": 0.0069418197066465044,
+      "language": "Serbian",
+      "model": "whisper-large-v3-turbo",
+      "model_revision": "hosted",
+      "engine_params": {
+        "language": "sr",
+        "temperature": 0.0,
+        "prompt": true,
+        "repetition_collapsed": 0,
+        "silence_dropped": null
+      },
+      "segments": 12,
+      "fix_report": {
+        "model": "openai/gpt-4o",
+        "batches": 1,
+        "rejected_batches": 0,
+        "changed_cues": 24,
+        "dropped_cues": 0
+      },
+      "text": "Imamo prosopiske premise, imamo pravna pravila, to su ona pravila koja imaju uređeno funkcionisanje države, i pomenuli smo dva osnovna principa funkcionisanja države, koja su poznata kao subordinacija i koordinacija. Subordinacija je odnos nadređenosti i podređenosti, tu imamo državne grane na različitom stepenu vlasti. A kod koordinacije imamo isti stepen vlasti i imamo saradnju. To je ono što smo prošlog puta radili, i gdje smo sve zaustavili. Sada idemo dalje. Kada je reč o ljudima, krenut ćemo sa ljudima da vidimo koji to ljudi rade, šta rade, kako rade i kakav je njihov odnos prema državi kao organizaciji. Dakle, državu kao organizaciju ne čine svi građani, ne čini svoj stanovništvo. Taj državni aparat čine samo neki ljudi. Ti ljudi koji čine taj državni aparat, oni se nazivaju državnim službenicima. Dakle, to su ljudi koji rade u ime i za račun države. E sad, tim državnim službenicima se daju određeni poslovi. Zadate imate određeno državno službeno lice, dajte mu da radi neki posao i taj posao predstavlja njegovu nadležnost. Ja se trudim dakle da vam što jednostavnije objasnim. Ne da se držim tih definicija iz udžbenika, nego najprostije što je moguće da vam objasnim. Uzmeš neki posao, daš ga jednom državnom službenom licu i kažeš evo ti, radi to. To je tvoja nadležnost. E sada, postoje dve vrste nadležnosti u principu i ova treća nekakva funkcionalna, to uopšte nije zakonska kategorija, ali se često spominje, pa ćemo nju objasniti, i prisutna je naravno u radu državnih organa, ali nije zakonska kategorija. Da krenemo od stvarne, dakle, ako uzmete recimo jednog sudiju koji je državno službeno lice, jednog narodnog poslanika koji je državno službeno lice, da li oni rade isto?",
+      "cues": [
+        {
+          "index": 1,
+          "start": 0.0,
+          "end": 4.66,
+          "lines": [
+            "Imamo prosopiske premise,",
+            "imamo pravna pravila,"
+          ]
+        },
+        {
+          "index": 2,
+          "start": 4.66,
+          "end": 8.42,
+          "lines": [
+            "to su ona pravila",
+            "koja imaju uređeno funkcionisanje države,"
+          ]
+        },
+        {
+          "index": 3,
+          "start": 8.42,
+          "end": 14.94,
+          "lines": [
+            "i pomenuli smo dva osnovna",
+            "principa funkcionisanja države,"
+          ]
+        },
+        {
+          "index": 4,
+          "start": 14.94,
+          "end": 20.22,
+          "lines": [
+            "koja su poznata kao subordinacija",
+            "i koordinacija."
+          ]
+        },
+        {
+          "index": 5,
+          "start": 20.2,
+          "end": 24.8,
+          "lines": [
+            "Subordinacija je odnos nadređenosti",
+            "i podređenosti,"
+          ]
+        },
+        {
+          "index": 6,
+          "start": 24.8,
+          "end": 29.48,
+          "lines": [
+            "tu imamo državne grane",
+            "na različitom stepenu vlasti."
+          ]
+        },
+        {
+          "index": 7,
+          "start": 30.74,
+          "end": 37.12,
+          "lines": [
+            "A kod koordinacije imamo isti",
+            "stepen vlasti i imamo saradnju."
+          ]
+        },
+        {
+          "index": 8,
+          "start": 37.12,
+          "end": 40.94,
+          "lines": [
+            "To je ono što smo prošlog puta radili,"
+          ]
+        },
+        {
+          "index": 9,
+          "start": 40.94,
+          "end": 44.24,
+          "lines": [
+            "i gdje smo sve zaustavili."
+          ]
+        },
+        {
+          "index": 10,
+          "start": 44.08,
+          "end": 46.38,
+          "lines": [
+            "Sada idemo dalje."
+          ]
+        },
+        {
+          "index": 11,
+          "start": 46.38,
+          "end": 50.94,
+          "lines": [
+            "Kada je reč o ljudima,"
+          ]
+        },
+        {
+          "index": 12,
+          "start": 50.94,
+          "end": 54.82,
+          "lines": [
+            "krenut ćemo sa ljudima",
+            "da vidimo koji to ljudi rade,"
+          ]
+        },
+        {
+          "index": 13,
+          "start": 54.82,
+          "end": 58.62,
+          "lines": [
+            "šta rade,",
+            "kako rade i kakav je njihov odnos"
+          ]
+        },
+        {
+          "index": 14,
+          "start": 58.26,
+          "end": 61.56,
+          "lines": [
+            "prema državi kao organizaciji."
+          ]
+        },
+        {
+          "index": 15,
+          "start": 61.56,
+          "end": 67.26,
+          "lines": [
+            "Dakle, državu kao organizaciju",
+            "ne čine svi građani,"
+          ]
+        },
+        {
+          "index": 16,
+          "start": 67.26,
+          "end": 69.34,
+          "lines": [
+            "ne čini svoj stanovništvo."
+          ]
+        },
+        {
+          "index": 17,
+          "start": 69.24,
+          "end": 75.4,
+          "lines": [
+            "Taj državni aparat čine",
+            "samo neki ljudi. Ti ljudi"
+          ]
+        },
+        {
+          "index": 18,
+          "start": 75.4,
+          "end": 77.96,
+          "lines": [
+            "koji čine taj državni aparat,"
+          ]
+        },
+        {
+          "index": 19,
+          "start": 77.96,
+          "end": 81.96,
+          "lines": [
+            "oni se nazivaju državnim službenicima."
+          ]
+        },
+        {
+          "index": 20,
+          "start": 83.06,
+          "end": 87.709,
+          "lines": [
+            "Dakle, to su ljudi",
+            "koji rade u ime i za račun države."
+          ]
+        },
+        {
+          "index": 21,
+          "start": 89.329,
+          "end": 95.909,
+          "lines": [
+            "E sad, tim državnim službenicima se",
+            "daju određeni poslovi."
+          ]
+        },
+        {
+          "index": 22,
+          "start": 96.249,
+          "end": 101.609,
+          "lines": [
+            "Zadate imate određeno",
+            "državno službeno lice,"
+          ]
+        },
+        {
+          "index": 23,
+          "start": 101.609,
+          "end": 107.749,
+          "lines": [
+            "dajte mu da radi neki posao i taj",
+            "posao predstavlja njegovu nadležnost."
+          ]
+        },
+        {
+          "index": 24,
+          "start": 107.669,
+          "end": 112.409,
+          "lines": [
+            "Ja se trudim dakle",
+            "da vam što jednostavnije objasnim."
+          ]
+        },
+        {
+          "index": 25,
+          "start": 112.409,
+          "end": 116.729,
+          "lines": [
+            "Ne",
+            "da se držim tih definicija iz udžbenika,"
+          ]
+        },
+        {
+          "index": 26,
+          "start": 116.729,
+          "end": 119.389,
+          "lines": [
+            "nego najprostije što je moguće",
+            "da vam objasnim."
+          ]
+        },
+        {
+          "index": 27,
+          "start": 119.429,
+          "end": 121.369,
+          "lines": [
+            "Uzmeš neki posao,"
+          ]
+        },
+        {
+          "index": 28,
+          "start": 121.369,
+          "end": 127.329,
+          "lines": [
+            "daš ga jednom državnom službenom licu",
+            "i kažeš evo ti, radi to."
+          ]
+        },
+        {
+          "index": 29,
+          "start": 127.329,
+          "end": 129.409,
+          "lines": [
+            "To je tvoja nadležnost."
+          ]
+        },
+        {
+          "index": 30,
+          "start": 131.329,
+          "end": 137.669,
+          "lines": [
+            "E sada, postoje dve vrste nadležnosti u",
+            "principu i ova treća nekakva funkcionalna,"
+          ]
+        },
+        {
+          "index": 31,
+          "start": 137.669,
+          "end": 140.329,
+          "lines": [
+            "to uopšte nije zakonska kategorija,"
+          ]
+        },
+        {
+          "index": 32,
+          "start": 140.329,
+          "end": 144.169,
+          "lines": [
+            "ali se često spominje,",
+            "pa ćemo nju objasniti,"
+          ]
+        },
+        {
+          "index": 33,
+          "start": 144.169,
+          "end": 147.469,
+          "lines": [
+            "i prisutna je naravno",
+            "u radu državnih organa,"
+          ]
+        },
+        {
+          "index": 34,
+          "start": 147.909,
+          "end": 150.329,
+          "lines": [
+            "ali nije zakonska kategorija."
+          ]
+        },
+        {
+          "index": 35,
+          "start": 150.329,
+          "end": 152.869,
+          "lines": [
+            "Da krenemo od stvarne, dakle,"
+          ]
+        },
+        {
+          "index": 36,
+          "start": 152.869,
+          "end": 158.709,
+          "lines": [
+            "ako uzmete recimo jednog sudiju",
+            "koji je državno službeno lice,"
+          ]
+        },
+        {
+          "index": 37,
+          "start": 158.709,
+          "end": 164.909,
+          "lines": [
+            "jednog narodnog poslanika koji je državno",
+            "službeno lice, da li oni rade isto?"
+          ]
+        }
+      ],
+      "lint_violations": 5,
+      "cue_stats": {
+        "count": 37,
+        "total_chars": 1673,
+        "mean_cps": 10.721403133990897,
+        "p95_cps": 15.691489361702128,
+        "max_cps": 17.66917293233085,
+        "over_line_pct": 0.0,
+        "over_lines_pct": 0.0,
+        "over_dur_pct": 0.0,
+        "over_cps_pct": 0.0,
+        "under_min_dur_pct": 0.0
+      },
+      "hallucination": {
+        "longest_repeat_n": 5,
+        "longest_repeat_text": "koji je državno službeno lice",
+        "repetition_collapsed": 0,
+        "silence_dropped": null,
+        "prompt_echo_n": 0,
+        "prompt_echo_text": "",
+        "filler_hits": {}
+      },
+      "reference_score": null,
+      "fix_change_rate": 0.15053763440860216
+    }
+  ],
+  "rescored_utc": "2026-08-04T15:06:15.500704+00:00"
+}

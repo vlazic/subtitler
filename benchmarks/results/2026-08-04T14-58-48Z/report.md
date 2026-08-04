@@ -5,7 +5,7 @@
 - clips: /home/vlazic/Projects/github.com/vlazic/subtitler/fixtures/gozba-sample.mp3, /home/vlazic/Projects/github.com/vlazic/subtitler/fixtures/uvod-u-pravo.m4a
 - denoisers: none, afftdn, arnndn, anlmdn, speech
 - engines: faster-whisper (large-v3, device cuda)
-- metrics recomputed from the kept transcripts: `2026-08-04T15:03:14.856846+00:00`
+- metrics recomputed from the kept transcripts: `2026-08-04T15:06:15.637388+00:00`
 
 ## What this run cannot answer
 
@@ -16,18 +16,20 @@
 
 ## Leaderboard (by speed: no reference exists)
 
-| # | clip | denoise | engine | fix | WER % | WER folded % | CER % | sub/ins/del | RTF | wall s | peak MB |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | uvod-u-pravo | arnndn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.038 | 10.9 | 3386 |
-| 2 | gozba-sample | speech | faster-whisper | no | n/a | n/a | n/a | n/a | 0.041 | 9.2 | 3385 |
-| 3 | gozba-sample | arnndn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.042 | 8.6 | 3386 |
-| 4 | gozba-sample | none | faster-whisper | no | n/a | n/a | n/a | n/a | 0.042 | 7.8 | 3385 |
-| 5 | gozba-sample | anlmdn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.042 | 8.4 | 3385 |
-| 6 | gozba-sample | afftdn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.042 | 7.8 | 3385 |
-| 7 | uvod-u-pravo | none | faster-whisper | no | n/a | n/a | n/a | n/a | 0.045 | 10.6 | 3385 |
-| 8 | uvod-u-pravo | afftdn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.047 | 11.1 | 3385 |
-| 9 | uvod-u-pravo | speech | faster-whisper | no | n/a | n/a | n/a | n/a | 0.047 | 13.4 | 3385 |
-| 10 | uvod-u-pravo | anlmdn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.047 | 11.9 | 3386 |
+`RTF` is decode time over audio duration and comes from the transcript, so it is the engine's own speed. `wall s` and `peak MB` are the whole cell in its own process, and the `cached` column is what it did **not** have to do: a cell that reused a cached transcript never loaded a model, and its wall clock and peak memory are not comparable with a cell that did.
+
+| # | clip | denoise | engine | fix | WER % | WER folded % | CER % | sub/ins/del | RTF | wall s | peak MB | cached |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | uvod-u-pravo | arnndn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.038 | 10.9 | 3386 | extract |
+| 2 | gozba-sample | speech | faster-whisper | no | n/a | n/a | n/a | n/a | 0.041 | 9.2 | 3385 | extract |
+| 3 | gozba-sample | arnndn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.042 | 8.6 | 3386 | extract |
+| 4 | gozba-sample | none | faster-whisper | no | n/a | n/a | n/a | n/a | 0.042 | 7.8 | 3385 | - |
+| 5 | gozba-sample | anlmdn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.042 | 8.4 | 3385 | extract |
+| 6 | gozba-sample | afftdn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.042 | 7.8 | 3385 | extract |
+| 7 | uvod-u-pravo | none | faster-whisper | no | n/a | n/a | n/a | n/a | 0.045 | 10.6 | 3385 | - |
+| 8 | uvod-u-pravo | afftdn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.047 | 11.1 | 3385 | extract |
+| 9 | uvod-u-pravo | speech | faster-whisper | no | n/a | n/a | n/a | n/a | 0.047 | 13.4 | 3385 | extract |
+| 10 | uvod-u-pravo | anlmdn | faster-whisper | no | n/a | n/a | n/a | n/a | 0.047 | 11.9 | 3386 | extract |
 
 ## Cue shape and hallucination signals
 

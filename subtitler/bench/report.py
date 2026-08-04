@@ -173,6 +173,7 @@ def _leaderboard(payload: dict[str, Any], any_reference: bool) -> list[str]:
         "RTF",
         "wall s",
         "peak MB",
+        "cached",
     ]
     table = []
     for i, r in enumerate(rows, start=1):
@@ -201,9 +202,21 @@ def _leaderboard(payload: dict[str, Any], any_reference: bool) -> list[str]:
                 _num(r.get("rtf"), 3),
                 _num(r.get("wall_s"), 1),
                 _num(r.get("peak_rss_mb"), 0),
+                ",".join(r.get("cached_stages", [])) or "-",
             ]
         )
-    return [heading, "", *_table(header, table), ""]
+    return [
+        heading,
+        "",
+        "`RTF` is decode time over audio duration and comes from the transcript, so it is "
+        "the engine's own speed. `wall s` and `peak MB` are the whole cell in its own "
+        "process, and the `cached` column is what it did **not** have to do: a cell that "
+        "reused a cached transcript never loaded a model, and its wall clock and peak "
+        "memory are not comparable with a cell that did.",
+        "",
+        *_table(header, table),
+        "",
+    ]
 
 
 def _quality(payload: dict[str, Any], ok: Sequence[dict[str, Any]]) -> list[str]:
@@ -280,7 +293,8 @@ def _fix_axis(ok: Sequence[dict[str, Any]]) -> list[str]:
         [
             r.get("cell_id", ""),
             _pct(r.get("fix_change_rate")),
-            str((r.get("fix_report") or {}).get("changed", "n/a")),
+            str((r.get("fix_report") or {}).get("changed_cues", "n/a")),
+            str((r.get("fix_report") or {}).get("model", "")),
             _num(r.get("wall_s"), 1),
         ]
         for r in sorted(fixed, key=lambda r: r.get("cell_id", ""))
@@ -294,7 +308,7 @@ def _fix_axis(ok: Sequence[dict[str, Any]]) -> list[str]:
         "reference transcript to answer, and is answered in the leaderboard above only when "
         "one exists.",
         "",
-        *_table(["cell", "change %", "cues changed", "wall s"], rows),
+        *_table(["cell", "change %", "cues changed", "model", "wall s"], rows),
         "",
     ]
 

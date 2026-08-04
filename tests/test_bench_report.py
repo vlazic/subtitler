@@ -165,13 +165,22 @@ class TestFixAxis:
                         cell_id="clip__none__faster-whisper__large-v3__fix",
                         fix=True,
                         fix_change_rate=0.07,
-                        fix_report={"changed": 12},
+                        fix_report={"changed_cues": 12, "model": "openai/gpt-4o"},
                     ),
                 ]
             )
         )
         assert "how much the model rewrote, not whether the rewrite" in text
         assert "7.0" in text
+        assert "| 12 |" in text
+
+    def test_a_cell_that_reused_a_cached_transcript_is_marked_as_such(self):
+        """Otherwise its wall clock reads as three seconds of transcription."""
+        text = report.render(
+            payload(results=[cell(cached_stages=["extract", "transcribe", "cues"])])
+        )
+        assert "extract,transcribe,cues" in text
+        assert "is what it did **not** have to do" in text
 
 
 class TestAlwaysPresent:
