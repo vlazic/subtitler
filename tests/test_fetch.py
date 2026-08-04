@@ -15,6 +15,7 @@ import json
 import sys
 import types
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -50,8 +51,26 @@ class FakeYoutubeDL:
     def __exit__(self, *exc):
         return False
 
+    # What the site says this URL is, before any option of ours is applied. A test that
+    # wants a live stream or a four-hour lecture replaces it.
+    remote: ClassVar[dict] = {
+        "id": "aaaaaaaaaaa",
+        "title": "Neki Naslov: sa čćžšđ",
+        "duration": 42.5,
+        "extractor_key": "Youtube",
+    }
+
     def extract_info(self, url, download=True):
         self.calls.append(url)
+        info = dict(self.remote)
+        # yt-dlp consults `match_filter` before a byte moves, and `download_ranges` to
+        # decide what to ask for. Both are called here for the same reason the progress
+        # hooks are: an option nothing ever calls is an option that proves nothing.
+        guard = self.opts.get("match_filter")
+        if guard is not None:
+            guard(info, incomplete=False)
+        self.sections = list(self.opts.get("download_ranges", lambda *_: [{}])(info, self))
+
         # The template is `<dir>/fetch.%(ext)s`; produce what a real run would.
         ext = self.opts.get("merge_output_format") or "m4a"
         path = Path(self.opts["outtmpl"].replace("%(ext)s", ext))
@@ -62,13 +81,7 @@ class FakeYoutubeDL:
                 {"status": "downloading", "downloaded_bytes": 5_000_000, "total_bytes": 10_000_000}
             )
             hook({"status": "finished", "filename": str(path)})
-        return {
-            "id": "aaaaaaaaaaa",
-            "title": "Neki Naslov: sa čćžšđ",
-            "duration": 42.5,
-            "extractor_key": "Youtube",
-            "requested_downloads": [{"filepath": str(path)}],
-        }
+        return {**info, "requested_downloads": [{"filepath": str(path)}]}
 
 
 @pytest.fixture
@@ -191,6 +204,110 @@ class TestFormatSelection:
         opts = options(tmp_path, kind="video")
         assert opts["quiet"] is True
         assert opts["logger"] is not None
+
+
+class TestOnlyTheWindowIsFetched:
+    """Regression: `--start`/`--end` never reached yt-dlp.
+
+    `run URL --start 1:00:00 --end 1:01:00` downloaded a whole four-hour source to keep
+    sixty seconds of it, because `options()` set no `download_ranges`. Asserted on the
+    constructed options, never on a real site.
+    """
+
+    def test_the_span_is_what_the_site_is_asked_for(self, tmp_path):
+        opts = options(tmp_path, kind="video", start=3600.0, end=3660.0)
+        assert opts["download_ranges"] == fetch.Section(start=3600.0, end=3660.0)
+        # yt-dlp's shape: (info_dict, ydl) -> Iterable[{start_time, end_time}]. A section
+        # is what makes it pick the ffmpeg downloader, which seeks instead of reading.
+        assert opts["download_ranges"](None, None) == [{"start_time": 3600.0, "end_time": 3660.0}]
+
+    def test_an_open_ended_window_runs_to_whatever_the_media_ends_at(self, tmp_path):
+        opts = options(tmp_path, kind="audio", start=90.0)
+        assert opts["download_ranges"](None, None) == [
+            {"start_time": 90.0, "end_time": float("inf")}
+        ]
+
+    def test_a_run_with_no_window_asks_for_no_range_at_all(self, tmp_path):
+        """The untrimmed path must be exactly what it was, or every URL run changes shape
+        for a feature it is not using."""
+        assert "download_ranges" not in options(tmp_path, kind="video")
+        assert "live_from_start" not in options(tmp_path, kind="video")
+
+    def test_a_stalled_host_does_not_hang_the_run_forever(self, tmp_path):
+        """yt-dlp inherits the socket module's default, which is to wait indefinitely."""
+        assert options(tmp_path, kind="video")["socket_timeout"] == fetch.SOCKET_TIMEOUT_S
+        assert options(tmp_path, kind="video", start=5.0)["socket_timeout"] > 0
+
+    def test_a_backwards_window_is_refused_before_the_options_exist(self, tmp_path):
+        with pytest.raises(FetchError, match="after start"):
+            options(tmp_path, kind="video", start=60.0, end=30.0)
+        with pytest.raises(FetchError, match="negative"):
+            options(tmp_path, kind="video", start=-1.0)
+
+    def test_the_window_reaches_yt_dlp_through_fetch(self, fake_yt_dlp, tmp_path, monkeypatch):
+        seen = {}
+        monkeypatch.setattr(fetch, "_import_yt_dlp", lambda: _capture(fake_yt_dlp, seen))
+        got = fetch.fetch(URL, tmp_path, kind="audio", start=10.0, end=20.0)
+        assert seen["ydl"].sections == [{"start_time": 10.0, "end_time": 20.0}]
+        # And recorded, because `duration` in fetch.json is then the span's and not the
+        # video's, and nothing else in the file would say so.
+        assert (got.section_start, got.section_end) == (10.0, 20.0)
+        assert got.is_fragment
+
+    def test_a_run_without_a_window_records_no_section(self, fake_yt_dlp, tmp_path):
+        got = fetch.fetch(URL, tmp_path, kind="audio")
+        assert (got.section_start, got.section_end) == (None, None)
+        assert not got.is_fragment
+
+    def test_the_window_is_part_of_the_fetch_key(self):
+        """It was deliberately left out, so that moving `--start` re-cut a cached download.
+        Now the download *is* the window, so a different window is a different file."""
+        assert fetch.cache_params("video", start=10.0) != fetch.cache_params("video", start=20.0)
+        assert fetch.cache_params("video") == fetch.cache_params("video", start=0.0, end=None)
+
+
+class TestNothingUnboundedIsDownloaded:
+    def test_a_live_stream_with_no_end_is_refused(self, tmp_path):
+        """It has no end, so the download has no end. Nothing in yt-dlp and nothing in this
+        pipeline would ever terminate it; the run just fills the disk."""
+        guard = options(tmp_path, kind="video")["match_filter"]
+        with pytest.raises(FetchError, match="live stream"):
+            guard({"is_live": True, "id": "x"}, incomplete=False)
+
+    def test_a_live_stream_bounded_by_an_end_is_allowed(self, tmp_path):
+        opts = options(tmp_path, kind="video", start=0.0, end=60.0)
+        assert opts["match_filter"]({"is_live": True, "id": "x"}, incomplete=False) is None
+        # And the window then means "from the beginning of the broadcast".
+        assert opts["live_from_start"] is True
+
+    def test_a_start_past_the_end_is_refused_before_the_bandwidth_is_spent(self, tmp_path):
+        """The same rule the `trim` stage applies to a local file, applied to a remote one
+        at the only moment the duration is known and nothing has transferred."""
+        guard = options(tmp_path, kind="audio", start=300.0)["match_filter"]
+        with pytest.raises(FetchError, match="109s"):
+            guard({"duration": 109.0, "id": "x"}, incomplete=False)
+
+    def test_an_ordinary_video_passes(self, tmp_path):
+        guard = options(tmp_path, kind="video", start=3600.0, end=3660.0)["match_filter"]
+        assert guard({"duration": 14400.0, "id": "x"}, incomplete=False) is None
+
+    def test_a_live_url_is_refused_through_fetch_and_not_merely_in_a_helper(
+        self, fake_yt_dlp, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(fake_yt_dlp, "remote", {"id": "x", "is_live": True})
+        with pytest.raises(FetchError, match="live stream"):
+            fetch.fetch(URL, tmp_path, kind="video")
+        assert not list(tmp_path.glob("fetch.*"))
+
+
+def _capture(cls, seen):
+    """A yt_dlp stand-in that keeps the YoutubeDL it built, so a test can read its options."""
+
+    def build(opts):
+        seen["ydl"] = cls(opts)
+        return seen["ydl"]
+
+    return types.SimpleNamespace(YoutubeDL=build)
 
 
 class TestFetch:

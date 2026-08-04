@@ -9,9 +9,15 @@ Two things this module is careful about:
 
 * **What it asks the site for.** `--srt-only` never renders a pixel, so asking YouTube for
   1080p to produce a text file spends the user's bandwidth on nothing. `kind="audio"` asks
-  for an audio track and `kind="video"` for a muxed mp4.
+  for an audio track and `kind="video"` for a muxed mp4. **How much of it**, too: a run with
+  `--start`/`--end` asks for that span and nothing else. Downloading a four-hour lecture to
+  keep sixty seconds of it is the same mistake as downloading 1080p for a text file, and it
+  is a larger one.
 * **Where it puts it.** The caller passes the directory, and the pipeline passes its work
   directory. Nothing lands in the user's CWD (non-negotiable 4).
+* **When to stop.** yt-dlp inherits the socket module's default timeout, which is to wait
+  forever, and a live stream has no end at all. `SOCKET_TIMEOUT_S` bounds the first and
+  `Guard` refuses the second.
 
 Errors are the other half of the job. A private video, a region block, a dead network and
 a yt-dlp too old for a site's current layout are four different problems with four
@@ -35,8 +41,11 @@ from subtitler import cache as cache_mod
 
 __all__ = [
     "FORMATS",
+    "SOCKET_TIMEOUT_S",
     "FetchError",
     "Fetched",
+    "Guard",
+    "Section",
     "available",
     "cache_params",
     "fetch",
@@ -81,6 +90,12 @@ INFO_NAME = "fetch.json"
 # GUI's log stream, for a number that only needs to move.
 PROGRESS_INTERVAL_S = 1.0
 
+# How long to wait on a host that has stopped answering. yt-dlp's default is the socket
+# module's, which is no timeout at all: a stalled connection hangs the run with no output
+# and no way back except Ctrl-C. Thirty seconds is long enough for a slow first byte on a
+# bad connection and short enough that `retries: 3` still gets to try.
+SOCKET_TIMEOUT_S = 30.0
+
 Progress = Callable[[str], None]
 
 
@@ -99,11 +114,21 @@ class Fetched:
     duration: float | None = None
     extractor: str = ""
     kind: str = "video"
+    # The span that was asked of the site, when one was. Recorded because `duration` above
+    # is then the span's length and not the video's, and a human reading `fetch.json` has
+    # no other way to tell the two apart.
+    section_start: float | None = None
+    section_end: float | None = None
 
     @property
     def stem(self) -> str:
         """A filesystem-safe name for the outputs derived from this download."""
         return slugify(self.title) or slugify(self.id) or work_stem(self.url)
+
+    @property
+    def is_fragment(self) -> bool:
+        """Whether what landed is already the requested span rather than the whole media."""
+        return self.section_start is not None or self.section_end is not None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -114,7 +139,76 @@ class Fetched:
             "duration": self.duration,
             "extractor": self.extractor,
             "kind": self.kind,
+            "section_start": self.section_start,
+            "section_end": self.section_end,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class Section:
+    """The span to download, in the shape yt-dlp's `download_ranges` option expects.
+
+    Written out here rather than taken from `yt_dlp.utils.download_range_func` so that
+    `options()` can be built, and asserted on, on a machine without the fetch extra. yt-dlp
+    calls it as `(info_dict, ydl) -> Iterable[Section]` and downloads only what it yields.
+
+    Yielding one makes yt-dlp pick its ffmpeg downloader, which seeks the remote file with
+    `-ss` before `-i`, so a sixty-second window out of a four-hour lecture transfers about
+    sixty seconds instead of four hours. `None` for the end becomes infinity, which yt-dlp
+    clamps to the media's own duration.
+    """
+
+    start: float = 0.0
+    end: float | None = None
+
+    def __call__(self, info: Any = None, ydl: Any = None) -> list[dict[str, float]]:
+        return [
+            {
+                "start_time": float(self.start),
+                "end_time": float("inf") if self.end is None else float(self.end),
+            }
+        ]
+
+
+@dataclass(frozen=True, slots=True)
+class Guard:
+    """yt-dlp's `match_filter`: the last check before anything starts transferring.
+
+    Two things are refused here rather than discovered halfway through a download, because
+    this is the first point at which the site has told us what the media actually is:
+
+    * **A live stream with no `--end`.** It has no end, so the download has no end either.
+      Nothing in yt-dlp, and nothing in this pipeline, would ever terminate it; the run just
+      fills the disk. Bounded by `--end` it is fine, and `live_from_start` in `options()` is
+      what makes the window mean "from the beginning of the stream".
+    * **A `--start` at or past the media's duration.** The same rule the `trim` stage applies
+      to a local file, applied to a remote one before the bandwidth is spent.
+
+    Raising rather than returning a reason string is deliberate: yt-dlp treats a returned
+    string as "skip this entry and carry on", which would end in `_downloaded_path` saying
+    a file is missing instead of saying why it was never fetched. `FetchError` is neither
+    `TypeError` nor `DownloadCancelled`, the two things `_match_entry` intercepts, so it
+    travels out of `extract_info` intact.
+    """
+
+    start: float = 0.0
+    end: float | None = None
+
+    def __call__(self, info: Any, *, incomplete: bool = False) -> None:
+        info = info if isinstance(info, dict) else {}
+        if info.get("is_live") and self.end is None:
+            raise FetchError(
+                "that URL is a live stream, and a live stream has no end, so downloading it "
+                "would never finish. Give --end (with --start) to take a fixed span from the "
+                "beginning of the stream, or wait until the stream is over."
+            )
+        duration = _as_float(info.get("duration"))
+        if duration and self.start >= duration:
+            raise FetchError(
+                f"--start is at or past the end of that media, which is {duration:.0f}s long. "
+                "There would be nothing to transcribe."
+            )
+        return None
 
 
 # --------------------------------------------------------------------------------------
@@ -198,17 +292,30 @@ def read_info(path: Path) -> Fetched | None:
         duration=data.get("duration"),
         extractor=str(data.get("extractor", "")),
         kind=str(data.get("kind", "video")),
+        section_start=_as_float(data.get("section_start")),
+        section_end=_as_float(data.get("section_end")),
     )
 
 
-def cache_params(kind: str) -> dict[str, Any]:
+def cache_params(kind: str, *, start: float = 0.0, end: float | None = None) -> dict[str, Any]:
     """Everything that changes what lands on disk, and nothing that does not.
 
     The format selector is in here as well as the shape name, so that changing the selector
     in a future release re-downloads rather than serving a file chosen by the old one. The
     output directory is not: moving a work directory does not change what was downloaded.
+
+    **The window is in here now, and that is a deliberate reversal.** It used to be left out
+    so that moving `--start` re-cut a download instead of repeating it. But the download was
+    the whole four-hour source, which is the cost this stage exists to avoid; now only the
+    requested span is transferred, so what is on disk *is* the window and a different window
+    is a different file. Moving `--start` by ten seconds re-fetches ten seconds' worth.
     """
-    return {"kind": kind, "format": FORMATS[kind]}
+    return {
+        "kind": kind,
+        "format": FORMATS[kind],
+        "start": round(start, 3),
+        "end": round(end, 3) if end is not None else None,
+    }
 
 
 def available() -> bool:
@@ -300,6 +407,13 @@ _EXPLANATIONS: tuple[tuple[tuple[str, ...], str], ...] = (
         "the site is rate-limiting this machine. Wait a few minutes and try again.",
     ),
     (
+        ("cannot be partially downloaded",),
+        (
+            "that format cannot be downloaded in pieces, so the window cannot be taken "
+            "remotely.\n  fix: drop --start/--end to fetch the whole thing and cut it here."
+        ),
+    ),
+    (
         ("unsupported url", "no video formats found", "no suitable format"),
         "yt-dlp found nothing downloadable at that URL.",
     ),
@@ -366,10 +480,31 @@ def _progress_reporter(progress: Progress | None) -> tuple[Any, Any]:
     return hook, Logger()
 
 
-def options(dst_dir: Path, *, kind: str, progress: Progress | None = None) -> dict[str, Any]:
-    """The yt-dlp options dict. Split out so a test can assert on it without a network."""
+def options(
+    dst_dir: Path,
+    *,
+    kind: str,
+    progress: Progress | None = None,
+    start: float = 0.0,
+    end: float | None = None,
+) -> dict[str, Any]:
+    """The yt-dlp options dict. Split out so a test can assert on it without a network.
+
+    `start`/`end` are the run's window, and passing them here rather than cutting after the
+    download is the whole point: `run URL --start 1:00:00 --end 1:01:00` used to transfer a
+    four-hour source to keep sixty seconds of it. A `Section` makes yt-dlp seek the remote
+    file instead.
+
+    Two things that have no window to bound them are bounded here as well: `socket_timeout`,
+    because yt-dlp's default is the socket module's, which is to wait forever on a host that
+    stopped answering, and `Guard`, which refuses a live stream that nothing would terminate.
+    """
     if kind not in FORMATS:
         raise FetchError(f"unknown fetch kind {kind!r}; choose from {sorted(FORMATS)}")
+    if start < 0:
+        raise FetchError(f"start must not be negative, got {start}")
+    if end is not None and end <= start:
+        raise FetchError(f"end ({end}) must be after start ({start})")
     hook, logger = _progress_reporter(progress)
     opts: dict[str, Any] = {
         "format": FORMATS[kind],
@@ -386,12 +521,25 @@ def options(dst_dir: Path, *, kind: str, progress: Progress | None = None) -> di
         "progress_hooks": [hook],
         "retries": 3,
         "overwrites": True,
+        # Never wait forever on a host that has stopped answering; see SOCKET_TIMEOUT_S.
+        "socket_timeout": SOCKET_TIMEOUT_S,
+        # Checked once the site has said what the media is, before any bytes move.
+        "match_filter": Guard(start=start, end=end),
     }
     if kind == "video":
         # One file out, whatever the site split it into. Without this a DASH source lands
         # as two files and the pipeline would transcribe the audio of one and burn onto
         # the other.
         opts["merge_output_format"] = "mp4"
+    if start or end is not None:
+        opts["download_ranges"] = Section(start=start, end=end)
+        # The cut lands on a keyframe, exactly as `media.trim_cmd`'s stream copy does, and
+        # for the same reason: re-encoding an hour to place a boundary a second earlier
+        # costs minutes for a fragment nothing downstream measures against the original.
+        opts["force_keyframes_at_cuts"] = False
+        # Only consulted for a live stream, where it is what makes the window mean "from
+        # the beginning of the broadcast" rather than "from wherever the edge is now".
+        opts["live_from_start"] = True
     return opts
 
 
@@ -401,16 +549,20 @@ def fetch(
     *,
     kind: str = "video",
     progress: Progress | None = None,
+    start: float = 0.0,
+    end: float | None = None,
 ) -> Fetched:
     """Download `url` into `dst_dir` and return what landed there.
 
     `kind` is "video" when the run will produce a video and "audio" when it will not.
+    `start`/`end` are the window to ask the site for, so that a fragment run transfers a
+    fragment; what comes back then *is* the fragment and needs no second cut.
     Raises `FetchError` with an actionable sentence for everything a user can fix.
     """
     yt_dlp = _import_yt_dlp()
     dst_dir = Path(dst_dir)
     dst_dir.mkdir(parents=True, exist_ok=True)
-    opts = options(dst_dir, kind=kind, progress=progress)
+    opts = options(dst_dir, kind=kind, progress=progress, start=start, end=end)
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -438,6 +590,8 @@ def fetch(
         duration=_as_float(info.get("duration")),
         extractor=str(info.get("extractor_key") or info.get("extractor") or ""),
         kind=kind,
+        section_start=start if (start or end is not None) else None,
+        section_end=end,
     )
 
 

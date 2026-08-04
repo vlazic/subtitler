@@ -23,21 +23,25 @@ nothing else. Switching `--style-preset` re-burns without re-transcribing; switc
 `--denoise` re-runs the denoiser without re-extracting audio from a 3 GB video.
 
 `fetch` is the one stage that cannot be content-addressed, because there is nothing to hash
-until it has already happened. Its key is the normalized URL plus which shape was asked for
-(audio for `--srt-only`, video otherwise), and deliberately nothing about the remote file:
-finding out whether the upload changed costs a network round trip, and paying for one on
-every warm run would make a re-run neither free nor offline. The consequence, stated
-plainly: if the uploader replaces the video behind a URL, this cache serves the old
+until it has already happened. Its key is the normalized URL, which shape was asked for
+(audio for `--srt-only`, video otherwise) and which span, and deliberately nothing about the
+remote file: finding out whether the upload changed costs a network round trip, and paying
+for one on every warm run would make a re-run neither free nor offline. The consequence,
+stated plainly: if the uploader replaces the video behind a URL, this cache serves the old
 download until `--force fetch`. That is the same tradeoff `content_id` makes for large
 files, for the same reason.
+
+The span is in that key because a URL run asks the site for the span rather than for the
+whole source, so moving `--start` re-downloads. That is the right way round: the download is
+now the length of the window, and fetching four hours to keep sixty seconds of them was the
+cost being avoided in the first place. A URL run therefore has no `trim` stage at all.
 
 `trim` sits between the source and the extraction rather than anywhere later, and that
 placement is the feature. Cutting first means the audio the recognizer sees *starts* at the
 fragment, so its cue timestamps come out relative to the fragment with no arithmetic
 anywhere downstream, and the burn re-encodes the fragment rather than the full-length
-source. Keying it on the source's content id plus the two timecodes is also what makes
-changing `--start` re-cut without re-downloading: `fetch` is upstream of it and its own key
-never mentions a timecode.
+source. It is keyed on the source's content id plus the two timecodes, so moving `--start`
+on a local file re-cuts and re-transcribes and nothing above it moves.
 
 `edit` is where hand corrections enter, and its input is a file no stage writes. See
 `edits.py` for why that placement is the only one that lets a correction survive a re-run
