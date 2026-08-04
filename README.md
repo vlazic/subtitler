@@ -72,8 +72,14 @@ installed is a hard error with the exact `uv sync` command to fix it, never a si
 | Platform | Engine | Status |
 |---|---|---|
 | Pop!_OS 22.04, ffmpeg 4.4.2 | groq | end to end: transcribe, cues, srt/vtt, burn-in, diacritics |
-| Pop!_OS 22.04, ffmpeg 4.4.2 | faster-whisper | not yet verified (lands in Phase 3) |
-| macOS 14, Apple Silicon, Homebrew ffmpeg | mlx | not yet verified |
+| ubuntu-latest CI, ffmpeg 7.x | n/a | doctor, tests, burn-in, hostile paths, diacritics |
+| macOS 14 Apple Silicon CI, ffmpeg-full 8.1.2 | n/a | doctor, tests, burn-in, hostile paths, diacritics |
+| Pop!_OS 22.04 | faster-whisper | not yet verified (lands in Phase 3) |
+| macOS 14 Apple Silicon | mlx | not yet verified (lands in Phase 3) |
+
+Both CI runners render `ČĆĐŠŽ čćđšž` identically from the bundled font, which is what the
+bundling is for. Transcription on a real Mac is still unverified: CI proves the path runs,
+not that mlx is any good at Serbian. That is what the benchmark is for.
 
 This table is updated only when CI or a human actually runs it there. Nothing is listed as
 working because it ought to.
