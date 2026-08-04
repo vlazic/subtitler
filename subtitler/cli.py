@@ -13,7 +13,9 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from subtitler import __version__
+# Imported at module scope only for the flag defaults. `postedit` is cheap: LiteLLM is
+# imported lazily inside it, so `--help` and a run without `--fix` never pay for it.
+from subtitler import __version__, postedit
 
 # Subcommands land phase by phase. Anything still stubbed exits with a clear message
 # naming the phase rather than an AttributeError or a half-run pipeline.
@@ -85,7 +87,38 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--max-dur", type=float, default=7.0, help="seconds")
     p_run.add_argument("--max-cps", type=float, default=20.0, help="characters per second")
     p_run.add_argument("--fix", action="store_true", help="run the LLM correction pass")
-    p_run.add_argument("--fix-model", default="anthropic/claude-sonnet-5", help="LiteLLM model id")
+    p_run.add_argument(
+        "--fix-model",
+        default=postedit.DEFAULT_MODEL,
+        help="any LiteLLM model id, e.g. openai/gpt-4o, groq/..., ollama/llama3.1",
+    )
+    p_run.add_argument(
+        "--fix-prompt",
+        default=postedit.DEFAULT_PROMPT,
+        help="prompt name from prompts/ (postedit, gozba) or a path to a .md file",
+    )
+    p_run.add_argument(
+        "--fix-temperature",
+        type=float,
+        default=None,
+        help=(
+            "forward a sampling temperature. Omitted by default on purpose: current Claude "
+            "models reject temperature/top_p/top_k with a 400"
+        ),
+    )
+    p_run.add_argument("--fix-batch", type=int, default=postedit.DEFAULT_BATCH_SIZE)
+    p_run.add_argument("--fix-workers", type=int, default=postedit.DEFAULT_WORKERS)
+    p_run.add_argument(
+        "--fix-markup",
+        default="strip",
+        choices=["strip", "html"],
+        help="what to do with markdown the model emits anyway (html gives <b>/<i>)",
+    )
+    p_run.add_argument(
+        "--drop-intro-phrases",
+        metavar="FILE",
+        help="drop cues containing any phrase in FILE, one per line. Off by default",
+    )
     p_run.add_argument("--auto-download", action="store_true", help="fetch a missing model")
     p_run.add_argument(
         "--force",
@@ -160,6 +193,20 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.prompt_file:
         prompt = Path(args.prompt_file).read_text(encoding="utf-8").strip()
 
+    fix = None
+    if args.fix:
+        fix = postedit.FixConfig(
+            model=args.fix_model,
+            prompt=args.fix_prompt,
+            batch_size=args.fix_batch,
+            workers=args.fix_workers,
+            temperature=args.fix_temperature,
+            markup=args.fix_markup,
+            drop_intro_phrases=(Path(args.drop_intro_phrases) if args.drop_intro_phrases else None),
+        )
+    elif args.drop_intro_phrases:
+        print("--drop-intro-phrases has no effect without --fix", file=sys.stderr)
+
     cfg = RunConfig(
         input=Path(args.input),
         out_dir=Path(args.out) if args.out else None,
@@ -184,6 +231,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             max_dur=args.max_dur,
             max_cps=args.max_cps,
         ),
+        fix=fix,
         force=args.force,
         dry_run=args.dry_run,
         verbose=args.verbose,

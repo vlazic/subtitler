@@ -25,7 +25,7 @@ from typing import Any
 
 from subtitler import burn as burn_mod
 from subtitler import cache as cache_mod
-from subtitler import media, render
+from subtitler import media, postedit, render
 from subtitler.cues import CueConfig, lint_cues, segments_to_cues
 from subtitler.engines import resolve
 from subtitler.engines.base import TranscribeOptions
@@ -62,6 +62,9 @@ class RunConfig:
     font: str | None = None
     font_size: int | None = None
     cues: CueConfig = field(default_factory=CueConfig)
+    # None means no correction pass. `--fix` is the only thing that sets it, so a run
+    # without the flag never imports LiteLLM and never needs an API key.
+    fix: postedit.FixConfig | None = None
     force: str | None = None
     dry_run: bool = False
     verbose: int = 0
@@ -78,6 +81,7 @@ class RunResult:
     lint: list[str] = field(default_factory=list)
     engine: str = ""
     cached: tuple[str, ...] = ()
+    fix: dict[str, Any] | None = None
     elapsed_s: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
@@ -90,6 +94,7 @@ class RunResult:
             "cue_count": len(self.cues),
             "lint_violations": self.lint,
             "cached_stages": list(self.cached),
+            "fix": self.fix,
             "elapsed_s": round(self.elapsed_s, 2),
             "rtf": round(self.transcript.rtf, 3) if self.transcript else None,
         }
@@ -144,6 +149,10 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
     transcript, transcribe_key = _transcribe(cfg, cache, engine, opts, audio_wav, audio_key, log)
     cues, cues_key = _cues(cfg, cache, transcript, transcribe_key, log)
 
+    fix_report: dict[str, Any] | None = None
+    if cfg.fix is not None:
+        cues, cues_key, fix_report = _fix(cfg, cache, cues, cues_key, log)
+
     srt_path = render.write_srt(out_dir / f"{stem}.srt", cues)
     vtt_path = render.write_vtt(out_dir / f"{stem}.vtt", cues)
     log(f"wrote: {srt_path.name}, {vtt_path.name} ({len(cues)} cues)")
@@ -160,6 +169,7 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
         cues=cues,
         lint=problems,
         engine=engine.name,
+        fix=fix_report,
     )
 
     if cfg.burn and not cfg.srt_only:
@@ -276,6 +286,48 @@ def _cues(
     write_json(artifact, cues_to_dict(cues))
     cache.commit(entry)
     return cues, entry.key
+
+
+def _fix(
+    cfg: RunConfig,
+    cache: cache_mod.StageCache,
+    cues: tuple[Cue, ...],
+    cues_key: str,
+    log: Any,
+) -> tuple[tuple[Cue, ...], str, dict[str, Any]]:
+    """The optional LLM correction pass, as its own cached stage.
+
+    Cached like every other stage, and the reason matters more here than elsewhere: this
+    is the only stage that costs money. A re-run that re-billed the same 40 batches to
+    produce the same file would be the cache's most expensive miss.
+
+    Its key chains from `cues`, so `burn` sees the corrected cues and re-burns exactly when
+    the correction changed. The report is stored alongside the cues so a warm run can still
+    say what the cold run did.
+    """
+    assert cfg.fix is not None
+    artifact = cache.work / "fix.json"
+    entry = cache.begin(
+        "fix",
+        input_hash=cues_key,
+        params=postedit.cache_params(cfg.fix, cfg.cues),
+        artifacts=(artifact,),
+    )
+    if entry.hit:
+        payload = read_json(artifact)
+        fixed = cues_from_dict(payload)
+        log(f"fix: cached ({len(fixed)} cues)")
+        return fixed, entry.key, payload.get("report", {})
+
+    log(f"fix: {len(cues)} cues through {cfg.fix.model}")
+    fixed, report = postedit.fix_cues(cues, cfg.fix, cue_config=cfg.cues, log=log)
+    write_json(artifact, {**cues_to_dict(fixed), "report": report.to_dict()})
+    cache.commit(entry)
+    log(
+        f"fix: {report.changed}/{len(cues)} cues changed"
+        + (f", {len(report.rejected)} batch(es) discarded" if report.rejected else "")
+    )
+    return fixed, entry.key, report.to_dict()
 
 
 def _burn(

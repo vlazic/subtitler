@@ -85,3 +85,13 @@ primary target**, Linux is the development platform.
 - `/etc/os-release` on this dev box is `ID=pop`, `ID_LIKE="ubuntu debian"`. Match on both.
 - Current Claude models reject `temperature`/`top_p`/`top_k` with a 400. `postedit.py` must
   not send sampling parameters unless the user asks explicitly.
+- **LiteLLM's `num_retries` needs `tenacity`, and LiteLLM does not depend on it.** Without
+  it the first retryable error becomes `tenacity import failed`, which hid a plain missing
+  `ANTHROPIC_API_KEY` behind a package name. It is in the `fix` extra for that reason.
+- The correction pass re-wraps the text it changed, and it must go through
+  `cues.wrap_words`, not the greedy `wrap_text`. Wrapping with the latter stranded the
+  clitic "se" at the start of a line, which is the exact break `cues.CLITICS` forbids. A
+  cue whose text came back unchanged keeps its original break: the splitter chose it from
+  real word timings, and nothing downstream can do better.
+- `<b>` and `<i>` are markup, not width. `cues.display_len` is what `lint` measures, so
+  `--fix-markup html` does not report violations on lines that read fine.

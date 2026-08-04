@@ -167,6 +167,34 @@ jobs:
           python -c "import json,sys; h=set(json.load(open('/tmp/forced.json'))['cached_stages']); sys.exit(0 if h=={'extract'} else f'expected only extract cached, got {h}')"
           cmp /tmp/cache-before.srt /tmp/local/tiny-10s.srt
 
+      - name: Post-edit without a key
+        # CI has no LLM API key and deliberately does not sync the `fix` extra, so the
+        # correction pass itself cannot run here; the batching, validation and prompt logic
+        # are covered by tests/test_postedit.py against a stubbed LiteLLM.
+        #
+        # What this proves is the part a unit test cannot: that on a machine without the
+        # extra, `--fix` stops with the install line instead of a traceback, and above all
+        # that it does not write an uncorrected file and exit 0. A `--fix` run that
+        # silently produces the untouched transcript is indistinguishable from a working
+        # one, which is why `postedit.fix_cues` raises when every batch fails.
+        run: |
+          uv run python -c "
+          from subtitler.postedit import load_prompt
+          for name in ('postedit', 'gozba'):
+              assert 'JSON array' in load_prompt(name), name
+          print('prompts load and carry the contract')
+          "
+          if uv run subtitler run fixtures/tiny-10s.wav --model tiny --srt-only \
+              -o /tmp/local --fix > /tmp/fix.log 2>&1; then
+            echo "--fix exited 0 with no litellm and no key; it must not"
+            cat /tmp/fix.log
+            exit 1
+          fi
+          cat /tmp/fix.log
+          grep -q -- "--extra fix" /tmp/fix.log
+          # And the sidecar files from the earlier cached run are untouched.
+          cmp /tmp/cache-before.srt /tmp/local/tiny-10s.srt
+
       - name: Denoise presets
         # Every preset must run end to end on both ffmpeg 7.x (Linux) and 8.x (Homebrew),
         # and arnndn must find its bundled model. A preset that only exists in --help is

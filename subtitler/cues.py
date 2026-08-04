@@ -20,6 +20,7 @@ code silently mangling the text.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from subtitler.model import Cue, Segment, Word, ensure_words
@@ -422,6 +423,20 @@ def segments_to_cues(
     return tuple(_timed(groups, cfg))
 
 
+_TAG_RE = re.compile(r"</?[a-zA-Z][^>]*>")
+
+
+def display_len(text: str) -> int:
+    """Characters a viewer actually sees.
+
+    `<b>` and `</i>` are markup a VTT player renders as weight, not as width, so counting
+    them against the line limit reports a violation on a line that reads perfectly. Nothing
+    in the pipeline emitted a tag before `--fix-markup html` existed, so this changes no
+    measurement that was ever taken on a file this project produced.
+    """
+    return len(_TAG_RE.sub("", text))
+
+
 def lint_cues(cues: tuple[Cue, ...], config: CueConfig | None = None) -> list[str]:
     """Report every cue-quality violation. An empty list means the file meets the bar."""
     cfg = config or CueConfig()
@@ -432,14 +447,17 @@ def lint_cues(cues: tuple[Cue, ...], config: CueConfig | None = None) -> list[st
         if len(cue.lines) > cfg.max_lines:
             problems.append(f"{label}: {len(cue.lines)} lines (max {cfg.max_lines})")
         for n, line in enumerate(cue.lines, start=1):
-            if len(line) > cfg.max_line:
-                problems.append(f"{label} line {n}: {len(line)} chars (max {cfg.max_line})")
+            width = display_len(line)
+            if width > cfg.max_line:
+                problems.append(f"{label} line {n}: {width} chars (max {cfg.max_line})")
         if cue.duration < cfg.min_dur - 1e-6:
             problems.append(f"{label}: {cue.duration:.2f}s is under the {cfg.min_dur}s minimum")
         if cue.duration > cfg.max_dur + 1e-6:
             problems.append(f"{label}: {cue.duration:.2f}s exceeds the {cfg.max_dur}s maximum")
-        if cue.cps > cfg.max_cps + 1e-6:
-            problems.append(f"{label}: {cue.cps:.1f} chars/sec exceeds {cfg.max_cps}")
+        # Reading speed over the visible characters, for the same reason: nobody reads a tag.
+        cps = display_len(cue.text) / cue.duration if cue.duration > 0 else float("inf")
+        if cps > cfg.max_cps + 1e-6:
+            problems.append(f"{label}: {cps:.1f} chars/sec exceeds {cfg.max_cps}")
         if i + 1 < len(cues) and cues[i + 1].start < cue.end - 1e-6:
             problems.append(f"{label}: overlaps cue {cues[i + 1].index}")
     return problems

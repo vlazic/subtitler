@@ -22,7 +22,11 @@ local = ["faster-whisper>=1.1", "numpy>=1.24"]
 # CTranslate2 wheels want CUDA 12 even when the driver ships 13.
 cuda = ["nvidia-cublas-cu12", "nvidia-cudnn-cu12>=9,<10"]
 cloud = ["groq>=0.12"]
-fix = ["litellm>=1.50"]
+# tenacity is what LiteLLM imports to honour `num_retries`, and it does not depend on it
+# itself. Without it the first retryable error becomes "tenacity import failed", which
+# hides the real one: a run with no API key reported a missing package, not a missing key.
+# Pure Python, so non-negotiable 6 still holds.
+fix = ["litellm>=1.50", "tenacity>=8"]
 # Benchmark-only denoisers, ported from gozba2/py/test.py. Not a runtime dep:
 # the CLI denoises with ffmpeg filters instead.
 denoise = ["noisereduce>=3.0", "librosa>=0.10", "soundfile>=0.12", "numpy>=1.24"]
@@ -44,6 +48,10 @@ packages = ["subtitler"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "subtitler/assets" = "subtitler/assets"
+# The post-edit prompts live at the repo root so they are obvious and editable in a
+# checkout, and are copied into the package so an installed wheel can still find them.
+# `postedit.PROMPT_DIRS` looks in both places.
+"prompts" = "subtitler/prompts"
 
 [tool.ruff]
 line-length = 100

@@ -49,6 +49,7 @@ subtitler run INPUT.mp4 --style-preset box    # outline | box | minimal
 subtitler run INPUT.mp4 --engine groq         # cloud instead of local
 subtitler run INPUT.mp4 --denoise speech      # none | afftdn | arnndn | anlmdn | speech
 subtitler run INPUT.mp4 --fix                 # optional LLM correction pass
+subtitler run INPUT.mp4 --fix --fix-model openai/gpt-4o
 subtitler run INPUT.mp4 --force transcribe    # ignore the cache from a stage onwards
 
 subtitler doctor [--install]                  # check and install system dependencies
@@ -72,6 +73,7 @@ The keys chain, so changing one thing re-does only what depends on it:
 | `--style-preset box` | the burn |
 | `--max-line 30` | cues, then the burn |
 | `--denoise afftdn` | denoise, transcribe, cues, burn (the extraction is reused) |
+| `--fix-model` or an edit to the prompt file | the correction pass, then the burn |
 | a different `--model` or device | transcribe onwards |
 | the input file's bytes | everything |
 
@@ -99,6 +101,50 @@ stage, and every preset is a built-in ffmpeg filter, so there is nothing to comp
 `arnndn` needs a model file, so one ships in `subtitler/assets/rnnoise/` (see the README
 there for provenance and licence). Nothing is downloaded at denoise time.
 
+## The correction pass
+
+`--fix` sends the cue text to an LLM to fix spelling, grammar and mangled proper nouns. Off
+by default, and the only part of this tool that leaves your machine or costs money.
+
+```bash
+uv sync --extra fix
+subtitler run INPUT.mp3 --fix                          # anthropic/claude-sonnet-5
+subtitler run INPUT.mp3 --fix --fix-model openai/gpt-4o
+subtitler run INPUT.mp3 --fix --fix-model ollama/llama3.1   # local, no key
+```
+
+It corrects **text only**. Timestamps are never sent to the model, so they cannot come back
+wrong: run the same file with and without `--fix` and every `-->` line is byte for byte the
+same. Cues go out in batches of 40 (`--fix-batch`) over 4 threads (`--fix-workers`) as a
+numbered JSON list, and a reply is accepted only if its length and its index set match the
+request exactly. A batch that fails that check is discarded, the original cues are kept, and
+the warning names the batch and its cue range. If every batch fails, the run stops with an
+error rather than writing an uncorrected file and exiting 0.
+
+`--fix-model` takes any [LiteLLM](https://docs.litellm.ai/docs/providers) model string, so
+OpenAI, Groq, Anthropic, Ollama and the rest work with no code change. **No sampling
+parameter is sent unless you pass `--fix-temperature`**, because current Claude models
+reject `temperature`, `top_p` and `top_k` with a 400 and LiteLLM forwards whatever it is
+given.
+
+The prompt is a file, not a string in the source:
+
+| Flag | Effect |
+|---|---|
+| `--fix-prompt postedit` | the default: grammar, source language and script preserved, no markdown |
+| `--fix-prompt gozba` | the Serbian philosophy-show variant: **bold** for figures, *italics* for titles |
+| `--fix-prompt ./mine.md` | any file. Everything above the first `---` is notes; the rest is the prompt |
+| `--fix-markup html` | keep the emphasis as `<b>`/`<i>` instead of stripping it |
+| `--drop-intro-phrases FILE` | drop cues containing any phrase in FILE, one per line |
+
+Markdown is stripped by default because the default output is burned into video through
+libass, which renders `<b>` as three literal characters. `--fix-markup html` is for the
+sidecar `.vtt` case; its tags do not count against the 42-character line limit, in the
+wrapper or in `lint`.
+
+`--drop-intro-phrases` removes only the cues that match, and matching ignores case, quotes
+and markup, so one line in the file covers every spelling of a station ident.
+
 ## Engines
 
 | Engine | Where | Notes |
@@ -118,6 +164,8 @@ installed is a hard error with the exact `uv sync` command to fix it, never a si
 | Pop!_OS 22.04, ffmpeg 4.4.2 | faster-whisper large-v3, CPU int8 | 109s of Serbian at RTF 0.68 |
 | Pop!_OS 22.04, ffmpeg 4.4.2 | stage cache | 83.9s cold, 0.52s warm, all three outputs byte-identical |
 | Pop!_OS 22.04, ffmpeg 4.4.2 | all five denoise presets | each runs and changes the audio |
+| Pop!_OS 22.04, ffmpeg 4.4.2 | `--fix` against `openai/gpt-4o` | 20 Serbian cues, 5 corrected, every timestamp byte-identical |
+| Any | `--fix` against Anthropic or Groq | not verified: no key for either on this machine |
 | ubuntu-latest CI | faster-whisper tiny | transcribe, burn-in, hostile paths, diacritics |
 | macOS 14 Apple Silicon CI, ffmpeg-full 8.1.2 | mlx tiny | transcribe (RTF 0.40), burn-in, hostile paths, diacritics |
 | Any | faster-whisper on CUDA | not verified: this dev box has CUDA 13 and CTranslate2 wants 12 |
