@@ -273,17 +273,23 @@ class TestFixStage:
 
     @pytest.fixture
     def model(self, monkeypatch):
-        """A stub LiteLLM that upper-cases every cue and counts the calls it was billed."""
+        """A stub model that upper-cases every cue and counts the calls it was billed.
+
+        Patched at `litellm_completer`, not at `_litellm_complete`. The former is what
+        binds the config to a callable, and it imports LiteLLM eagerly so a machine without
+        the `fix` extra is told once instead of once per batch. Patching below that point
+        made the whole class fail on CI, which syncs without the extra on purpose.
+        """
         calls = []
 
-        def complete(_system: str, user: str, _cfg) -> str:
+        def complete(_system: str, user: str) -> str:
             calls.append(user)
             items = json.loads(user)
             return json.dumps(
                 [{"i": it["i"], "text": it["text"].upper()} for it in items], ensure_ascii=False
             )
 
-        monkeypatch.setattr(postedit, "_litellm_complete", complete)
+        monkeypatch.setattr(postedit, "litellm_completer", lambda _cfg: complete)
         return calls
 
     def test_fix_changes_the_text_and_moves_no_timestamp(self, tmp_path, fakes, model):
