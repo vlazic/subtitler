@@ -114,11 +114,19 @@ class GroqEngine:
     def _request(self, filename: str, payload: bytes, opts: TranscribeOptions) -> dict[str, Any]:
         import groq
 
+        # Shuffled rather than randomly re-drawn per attempt, so the pool still spreads a
+        # long batch across keys while every key is guaranteed a turn. Found by the Phase 7
+        # matrix: one of the two keys in this pool answers "Organization has been
+        # restricted", `random.choice` drew it for roughly half the cloud cells, and a 400
+        # is not retryable, so an identical `bench run` failed a different random half of
+        # its cloud cells every time. A key pool whose dead key can end the run is not a
+        # pool.
         keys = self.api_keys()
+        order = random.sample(keys, len(keys))
         last_error: Exception | None = None
 
-        for attempt in range(self.max_retries):
-            key = random.choice(keys)
+        for attempt in range(max(self.max_retries, len(order))):
+            key = order[attempt % len(order)]
             client = groq.Groq(api_key=key)
             kwargs: dict[str, Any] = {
                 "file": (filename, payload),
@@ -140,6 +148,13 @@ class GroqEngine:
                 if self._retryable(exc) and attempt < self.max_retries - 1:
                     last_error = exc
                     time.sleep(min(2**attempt, 8))
+                    continue
+                if attempt + 1 < len(order):
+                    # Not retryable *with this key*, which is not the same as not
+                    # retryable: a restricted organization or an exhausted quota belongs to
+                    # one key, and the next one in the pool may be fine. No backoff, since
+                    # nothing is being waited out.
+                    last_error = exc
                     continue
                 # Surface API failures as an engine error with a fix, not as a traceback
                 # out of the SDK. Account-level problems in particular ("organization

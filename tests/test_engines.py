@@ -14,6 +14,7 @@ import sys
 import types
 import wave
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -344,3 +345,88 @@ class TestOptions:
         """It is the main driver of repetition loops, and lets one bad segment poison
         everything after it."""
         assert TranscribeOptions().condition_on_previous_text is False
+
+
+class TestGroqKeyPool:
+    """A key pool whose dead key can end the run is not a pool.
+
+    Found by the Phase 7 benchmark matrix, not by a unit test: one of the two keys in the
+    maintainer's pool answers "Organization has been restricted", and `random.choice` drew
+    it for about half the cloud cells. A 400 is not retryable, so an identical `bench run`
+    failed a different random half of its cloud cells on every attempt.
+    """
+
+    @staticmethod
+    def _fake_groq(dead: set[str], seen: list[str]) -> types.ModuleType:
+        class Restricted(Exception):
+            status_code = 400
+            body: ClassVar[dict] = {"error": {"message": "Organization has been restricted."}}
+
+        class Response:
+            @staticmethod
+            def json() -> str:
+                return '{"language": "sr", "duration": 1.0, "segments": []}'
+
+        class Client:
+            def __init__(self, api_key: str) -> None:
+                self.api_key = api_key
+                self.audio = self
+
+            @property
+            def transcriptions(self):  # the SDK's client.audio.transcriptions.create
+                return self
+
+            def create(self, **_kwargs):
+                seen.append(self.api_key)
+                if self.api_key in dead:
+                    raise Restricted()
+                return Response()
+
+        module = types.ModuleType("groq")
+        module.Groq = Client
+        return module
+
+    def _engine(self, monkeypatch, keys: str):
+        from subtitler.engines import groq as groq_engine
+
+        monkeypatch.setenv("GROQ_API_KEYS", keys)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        # The pool is shuffled to spread load, which would make "the dead key was tried
+        # first" a coin flip. Pinning the order is what makes the fallback observable.
+        monkeypatch.setattr(groq_engine.random, "sample", lambda seq, k: list(seq)[:k])
+        return groq_engine.GroqEngine("turbo")
+
+    def test_a_restricted_key_falls_through_to_a_live_one(self, monkeypatch) -> None:
+        seen: list[str] = []
+        monkeypatch.setitem(sys.modules, "groq", self._fake_groq({"dead"}, seen))
+        engine = self._engine(monkeypatch, "dead,live")
+        result = engine._request("a.wav", b"x", TranscribeOptions())
+        assert result["language"] == "sr"
+        assert seen == ["dead", "live"]
+
+    def test_every_key_gets_a_turn_before_the_run_gives_up(self, monkeypatch) -> None:
+        seen: list[str] = []
+        monkeypatch.setitem(sys.modules, "groq", self._fake_groq({"a", "b"}, seen))
+        engine = self._engine(monkeypatch, "a,b")
+        with pytest.raises(EngineUnavailable) as exc:
+            engine._request("a.wav", b"x", TranscribeOptions())
+        assert "restricted" in str(exc.value)
+        assert set(seen) == {"a", "b"}
+
+    def test_a_pool_larger_than_the_retry_budget_is_still_exhausted(self, monkeypatch) -> None:
+        """`max_retries` counts attempts at one key; it must not cap how many keys are tried."""
+        seen: list[str] = []
+        monkeypatch.setitem(sys.modules, "groq", self._fake_groq({"a", "b", "c", "d"}, seen))
+        engine = self._engine(monkeypatch, "a,b,c,d,e")
+        engine.max_retries = 2
+        assert engine._request("a.wav", b"x", TranscribeOptions())["language"] == "sr"
+        assert "e" in seen
+
+    def test_one_key_still_fails_once_and_says_why(self, monkeypatch) -> None:
+        seen: list[str] = []
+        monkeypatch.setitem(sys.modules, "groq", self._fake_groq({"only"}, seen))
+        engine = self._engine(monkeypatch, "only")
+        with pytest.raises(EngineUnavailable) as exc:
+            engine._request("a.wav", b"x", TranscribeOptions())
+        assert seen == ["only"]
+        assert "local engine" in str(exc.value)
