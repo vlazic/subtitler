@@ -13,8 +13,7 @@ preference order at that point.
 
 from __future__ import annotations
 
-import platform
-
+from subtitler.doctor import detect_platform
 from subtitler.engines.base import Availability, Engine, EngineUnavailable
 from subtitler.engines.groq import GroqEngine
 
@@ -26,7 +25,12 @@ _AUTO_ORDER = ["groq", "groq-turbo"]
 
 
 def is_apple_silicon() -> bool:
-    return platform.system() == "Darwin" and platform.machine() in {"arm64", "aarch64"}
+    """Platform facts come from doctor.detect_platform, never from `platform` directly.
+
+    Keeping one detector means the mac branch stays fakeable in tests, which is the only
+    way the primary target gets exercised on a Linux dev machine.
+    """
+    return detect_platform().is_apple_silicon
 
 
 def _build(name: str, *, model: str, device: str) -> Engine:

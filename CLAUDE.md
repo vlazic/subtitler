@@ -56,6 +56,10 @@ primary target**, Linux is the development platform.
 - ffmpeg 4.4 (Ubuntu 22.04) vs 7.x/8.x (Homebrew): `-vsync` vs `-fps_mode`, and `-shortest`
   against an infinite `lavfi` source is unreliable on 4.x. Always pass an explicit `d=` and
   `-t` from ffprobe.
+- **Name every filter option.** `ass=subs.ass:fontsdir=fonts` works on 4.4 and is rejected
+  by Homebrew's 8.x with "No option name near ...", because a positional value can no
+  longer be mixed with named options. Use `ass=f=subs.ass:fontsdir=fonts`. This was found
+  by the macOS CI job on its first run, which is the entire argument for having it.
 - `-pix_fmt yuv420p` is mandatory on every encode. Without it QuickTime and Safari may
   refuse the file, and the target user is on a Mac.
 - ASS colors are `&HAABBGGRR`, byte order reversed from RGBA. Use `rgba_to_ass()`.

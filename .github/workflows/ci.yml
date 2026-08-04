@@ -61,6 +61,11 @@ jobs:
       - name: Tests
         run: uv run pytest -v
 
+      - name: Doctor
+        # Must pass on a runner where only ffmpeg and uv were installed. Any required
+        # dependency the doctor cannot see here is one the friend will hit too.
+        run: uv run subtitler doctor
+
       - name: CLI smoke test
         run: |
           uv run subtitler --version

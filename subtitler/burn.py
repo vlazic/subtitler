@@ -214,7 +214,12 @@ def build_ass(
 # Command builders. Pure functions, asserted on directly in tests.
 # --------------------------------------------------------------------------------------
 
-_FILTER = "ass=subs.ass:fontsdir=fonts"
+# Every option is named. The shorthand `ass=subs.ass:fontsdir=fonts` works on ffmpeg 4.4
+# but is rejected outright by the 8.x that Homebrew ships ("No option name near
+# 'subs.ass:fontsdir=fonts'"), because mixing a positional value with named options is no
+# longer allowed. `f` is a documented alias for `filename` on both, so the explicit form is
+# the one that lives in the intersection. Caught by the macOS CI job on its first run.
+_FILTER = "ass=f=subs.ass:fontsdir=fonts"
 
 
 def burn_video_cmd(src: Path, dst: Path, *, crf: int = 20, preset: str = "medium") -> list[str]:

@@ -18,7 +18,6 @@ from subtitler import __version__
 # Subcommands land phase by phase. Anything still stubbed exits with a clear message
 # naming the phase rather than an AttributeError or a half-run pipeline.
 _PENDING = {
-    "doctor": "Phase 2",
     "models": "Phase 3",
     "bench": "Phase 7",
 }
@@ -187,6 +186,72 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    import subprocess
+
+    from subtitler.config import load_dotenv
+    from subtitler.doctor import detect_platform, diagnose, install_plan, render
+
+    load_dotenv()
+    plat = detect_platform()
+    statuses = diagnose(plat)
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "platform": {
+                        "system": plat.system,
+                        "machine": plat.machine,
+                        "distro_id": plat.distro_id,
+                        "distro_like": plat.distro_like,
+                        "brew_prefix": str(plat.brew_prefix) if plat.brew_prefix else None,
+                        "rosetta": plat.rosetta,
+                        "package_manager": plat.package_manager,
+                    },
+                    "deps": [s.to_dict() for s in statuses],
+                },
+                indent=2,
+            )
+        )
+        return 1 if any(s.blocking for s in statuses) else 0
+
+    print(render(statuses, plat))
+
+    if not args.install:
+        return 1 if any(s.blocking for s in statuses) else 0
+
+    commands = install_plan(statuses, plat)
+    if not commands:
+        print("\nnothing to install through a package manager here.", file=sys.stderr)
+        return 1 if any(s.blocking for s in statuses) else 0
+
+    print("\nwill run:")
+    for cmd in commands:
+        print("  " + " ".join(cmd))
+    if not args.yes:
+        try:
+            if input("\nproceed? [y/N] ").strip().lower() not in {"y", "yes"}:
+                print("aborted", file=sys.stderr)
+                return 1
+        except EOFError:
+            print("not a tty; pass --yes to install non-interactively", file=sys.stderr)
+            return 1
+
+    for cmd in commands:
+        print(f"\n+ {' '.join(cmd)}", file=sys.stderr)
+        proc = subprocess.run(cmd, check=False)
+        if proc.returncode != 0:
+            print(f"failed: {' '.join(cmd)}", file=sys.stderr)
+            return proc.returncode
+
+    # Re-check, so the exit code reflects reality rather than the attempt.
+    print("\nre-checking...\n", file=sys.stderr)
+    statuses = diagnose(plat)
+    print(render(statuses, plat))
+    return 1 if any(s.blocking for s in statuses) else 0
+
+
 def _cmd_lint(args: argparse.Namespace) -> int:
     from subtitler.cues import CueConfig, lint_cues
     from subtitler.render import read_subtitles
@@ -267,6 +332,7 @@ def _cmd_convert(args: argparse.Namespace) -> int:
 
 _HANDLERS = {
     "run": _cmd_run,
+    "doctor": _cmd_doctor,
     "lint": _cmd_lint,
     "burn": _cmd_burn,
     "convert": _cmd_convert,

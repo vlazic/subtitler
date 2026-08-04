@@ -149,7 +149,19 @@ class TestCommands:
                 tmp_path / "a.wav", tmp_path / "o.mp4", duration=1.0, width=640, height=360
             ),
         ):
-            assert cmd[cmd.index("-vf") + 1] == "ass=subs.ass:fontsdir=fonts"
+            assert cmd[cmd.index("-vf") + 1] == "ass=f=subs.ass:fontsdir=fonts"
+
+    def test_every_filter_option_is_named(self, tmp_path) -> None:
+        """Regression: Homebrew ffmpeg 8.x rejects a positional filename mixed with named
+        options ("No option name near 'subs.ass:fontsdir=fonts'"), while 4.4 accepts it.
+        The macOS CI job caught this on its first run. Every option must carry its name."""
+        filt = burn_video_cmd(tmp_path / "in.mp4", tmp_path / "out.mp4")[
+            burn_video_cmd(tmp_path / "in.mp4", tmp_path / "out.mp4").index("-vf") + 1
+        ]
+        name, _, options = filt.partition("=")
+        assert name == "ass"
+        for option in options.split(":"):
+            assert "=" in option, f"{option!r} is positional; name it explicitly"
 
     def test_canvas_passes_duration_twice_and_never_uses_shortest(self, tmp_path) -> None:
         """-shortest against an infinite lavfi source is unreliable on ffmpeg 4.x, which
