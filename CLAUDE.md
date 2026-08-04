@@ -118,5 +118,15 @@ primary target**, Linux is the development platform.
   alone, so asking for cuda by name handed CTranslate2 an unprepared loader and died with
   `libcublas.so.12 is not found` at the first decoded window, on a box where `doctor` had
   just reported CUDA usable. `_load()` preloads whenever the resolved device is cuda.
+- **A denoiser can make Whisper echo the steering prompt.** `--denoise arnndn` on
+  `fixtures/uvod-u-pravo.m4a` opens with the tail of `SERBIAN_PROMPT` in place of the first
+  fifty words of the lecture, on the **sequential** path, where the documented batched-decoding
+  cause does not apply. Only faster-whisper; both Groq models handled the same denoised WAV.
+  `bench/metrics.prompt_echo` exists to catch it, because nothing else does: the text repeats
+  nothing, has no filler word in it and reads like Serbian.
+- **A key pool needs every key tried, not one drawn at random.** `groq.py` used
+  `random.choice` per attempt and gave up on the first non-retryable error, so one restricted
+  key out of two failed a different random half of the benchmark's cloud cells on every run.
+  Shuffle once, then give each key a turn.
 - `<b>` and `<i>` are markup, not width. `cues.display_len` is what `lint` measures, so
   `--fix-markup html` does not report violations on lines that read fine.

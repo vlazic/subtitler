@@ -102,7 +102,7 @@ subtitler doctor [--install]                  # check and install system depende
 subtitler models list | download | path | rm
 subtitler burn VIDEO SUBS -o OUT [--preview]  # re-style without re-transcribing
 subtitler lint SUBS.srt                       # check cue length, duration, reading speed
-subtitler bench run | report                  # engine and denoiser quality matrix
+subtitler bench run | report                  # engine x denoiser x clip matrix, see below
 ```
 
 ## Re-runs are free
@@ -190,6 +190,56 @@ wrapper or in `lint`.
 
 `--drop-intro-phrases` removes only the cues that match, and matching ignores case, quotes
 and markup, so one line in the file covers every spelling of a station ident.
+
+## The benchmark
+
+```bash
+uv sync --extra bench
+subtitler bench run                       # every local engine x every denoiser x every clip
+subtitler bench run --engine faster-whisper,groq-turbo --device cuda --fix
+subtitler bench report [RUN]              # recompute every metric from the kept transcripts
+```
+
+Each cell writes to `benchmarks/results/<UTC timestamp>/`: `results.json` (one record per
+cell), `transcripts/` (every hypothesis, as text and as SRT), `env.json` (`doctor --json`
+plus the OS, CPU, RAM, GPU and library versions) and a generated `report.md`. The git SHA is
+recorded and a dirty tree is refused without `--allow-dirty`, because a result whose commit
+does not describe the code that produced it is worse than no result.
+
+**Cells run one per process.** Peak RSS is one of the numbers, and `getrusage` reports a
+high-water mark that never comes down, so a second cell measured in the same interpreter
+would inherit the first one's peak. They share the stage cache instead, clip-outermost, so
+each clip is extracted once and each denoiser runs once no matter how many engines follow.
+
+**Two kinds of number, and the report keeps them apart.** WER, WER_folded, CER and the
+substitution/insertion/deletion split need a reference transcript. Realtime factor, wall
+clock, peak memory, cue count, reading speed and the hallucination heuristics do not.
+`benchmarks/references/` is currently empty, so **no WER is reported at all**: the harness
+says so and emits the reference-free half rather than inventing a ground truth. Adjudicated
+references are Phase 8. When one lands, `subtitler bench report` scores a run from months
+ago against it without re-transcribing anything.
+
+Text is normalized identically on both sides before scoring: NFC, Serbian Cyrillic to Latin
+through a hand-written table, lowercase, punctuation to spaces, whitespace collapsed.
+**WER_folded** repeats the score with `č ć` folded to `c`, `đ` to `dj`, `š` to `s` and `ž`
+to `z`. The gap between the two is the most useful single number for Serbian: it separates
+hearing the wrong word from writing `c` where `č` belongs. Digits and abbreviations are
+deliberately left alone in v1, so `20` scores against `dvadeset` as an error; that inflates
+every engine's number equally and the report says so next to the table.
+
+What the first full matrix (30 cells on an RTX 3090, `benchmarks/results/`) actually found:
+
+- **`--denoise arnndn` can lose speech.** On the 164 s law lecture it produced 232 words
+  against 280 for every other preset, and opened with `Koristi ispravna imena za ljude,
+  knjige, filozofske škole itd.` where the first fifty words belong: the tail of the Serbian
+  steering prompt, echoed back as transcript. Sequential decoding, not batched. Only
+  faster-whisper did this; both Groq models transcribed the same denoised audio normally.
+  `metrics.prompt_echo` exists because of that cell, and the report calls it out by name.
+- **The other three denoisers change almost nothing**, which is what the prior art said and
+  the reason denoising is off by default.
+- **Speed, on this box**: `groq-turbo` RTF 0.006 to 0.015, `groq` 0.012 to 0.018, local
+  `large-v3` on CUDA float16 0.041 to 0.047 at 3.4 GB peak RSS. Whether the local transcript
+  is *better* is exactly the question no reference can answer yet.
 
 ## Engines
 
@@ -309,6 +359,10 @@ does batch 32: 6% faster than 16 and 22.5 GB of VRAM against under 16.
 | Pop!_OS 22.04, RTX 3090 | the same, `--batch-size 16` | 54min at RTF 0.015, under 16 GB VRAM |
 | Pop!_OS 22.04, RTX 3090 | CPU int8 against CUDA float16 | identical cue text on the 109s fixture, 96.9% word agreement over 54 minutes |
 | Pop!_OS 22.04, no `--extra cuda` | the CUDA-less fallback | doctor warns and names `libcublas.so.12`, the run decodes on the CPU, exit 0 |
+| Pop!_OS 22.04, RTX 3090 | `subtitler bench run`, 30 cells | 2 clips x 5 denoisers x faster-whisper/groq/groq-turbo, every cell ok, 4 minutes |
+| Pop!_OS 22.04, RTX 3090 | the `--fix` axis, 12 cells | `openai/gpt-4o` rewrote 2.0% to 15.4% of the words, depending on the clip |
+| Pop!_OS 22.04 | `subtitler bench report` | recomputed every metric from the kept transcripts, no model reloaded |
+| Any | WER, CER, WER_folded on real clips | not verified: no reference transcript exists yet. The code path is unit-tested, nothing more |
 | Pop!_OS 22.04, Chrome | `subtitler gui` | picked a file, set the options and started a run from the page; 109s of Serbian burned in, 21 cues, 12s |
 | ubuntu-latest CI | `subtitler gui` | binds, serves the page, refuses an untokened call, reports dependencies, completes a faster-whisper run through the API, headless |
 | macOS 14 Apple Silicon CI | `subtitler gui` | the same, reporting `Darwin arm64 brew:/opt/homebrew` and `Show in Finder`, transcribing on mlx |
