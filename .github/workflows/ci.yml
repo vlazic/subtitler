@@ -104,7 +104,9 @@ jobs:
         run: |
           uv run subtitler --version
           uv run subtitler convert fixtures/groq_verbose.json -o /tmp/fixture.srt
-          uv run subtitler lint /tmp/fixture.srt || true   # Phase 1 cues are known-naive
+          # No `|| true`: the splitter is required to produce a clean file. This is the
+          # PRD acceptance criterion (<=2 lines of 42 chars, 1.0-7.0s, <=20 chars/sec).
+          uv run subtitler lint /tmp/fixture.srt
 
       - name: Burn smoke test
         # The end-to-end path that only breaks on someone else's machine: libass, the
@@ -136,6 +138,7 @@ jobs:
           uv run subtitler models list
           uv run subtitler run fixtures/tiny-10s.wav --model tiny --srt-only -o /tmp/local
           test -s /tmp/local/tiny-10s.srt
+          uv run subtitler lint /tmp/local/tiny-10s.srt
           echo "--- transcript ---"
           cat /tmp/local/tiny-10s.srt
 

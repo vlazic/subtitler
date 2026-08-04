@@ -339,6 +339,24 @@ def soft_mux_cmd(src: Path, subs: Path, dst: Path, *, language: str = "srp") -> 
     ]
 
 
+def preview_cmd(
+    src: Path,
+    dst: Path,
+    *,
+    at: float,
+    lavfi: str | None = None,
+) -> list[str]:
+    """One still frame with the subtitles rendered, for comparing styles by eye."""
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-v", "error"]
+    if lavfi:
+        # Audio-only source: there is no picture to seek into, so synthesize one.
+        cmd += ["-f", "lavfi", "-i", lavfi]
+    else:
+        cmd += ["-ss", f"{at:.3f}", "-i", str(src)]
+    cmd += ["-vf", _FILTER, "-frames:v", "1", str(dst)]
+    return cmd
+
+
 def even(value: int) -> int:
     """yuv420p requires even dimensions; an odd canvas size fails the encode outright."""
     return value - (value % 2)
@@ -347,6 +365,65 @@ def even(value: int) -> int:
 # --------------------------------------------------------------------------------------
 # Execution
 # --------------------------------------------------------------------------------------
+
+
+def preview(
+    cues: tuple[Cue, ...],
+    out_dir: Path,
+    *,
+    video: Path | None = None,
+    audio: Path | None = None,
+    width: int,
+    height: int,
+    canvas_color: str = "0x101010",
+    presets: tuple[str, ...] = ("outline", "box", "minimal"),
+    dry_run: bool = False,
+) -> list[Path]:
+    """Render one still per style preset, at a moment where a cue is actually on screen.
+
+    A table of font sizes and outline widths tells you nothing about whether text is
+    readable over your own footage. Three images do.
+    """
+    if not cues:
+        raise MediaError("no cues to preview")
+
+    width, height = even(width), even(height)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Pick the longest cue: the most text on screen is the hardest case for legibility,
+    # and the widest margin for a seek landing slightly off.
+    target = max(cues, key=lambda c: len(c.text))
+    at = (target.start + target.end) / 2
+
+    written: list[Path] = []
+    for name in presets:
+        if name not in PRESETS:
+            raise MediaError(f"unknown style preset {name!r}; choose from {sorted(PRESETS)}")
+        dst = out_dir / f"preview-{name}.png"
+        # `-ss` before `-i` rebases timestamps to zero, so the cue is written starting at
+        # zero and the seek lands on it regardless of where it sits in the timeline.
+        shifted = Cue(index=1, start=0.0, end=target.duration, lines=target.lines)
+        ass_text = build_ass(
+            (shifted,), width=width, height=height, style=PRESETS[name], font_name=BUNDLED_FONT
+        )
+
+        with TemporaryDirectory(prefix="subtitler-preview-") as tmp:
+            work = Path(tmp)
+            (work / "subs.ass").write_text(ass_text, encoding="utf-8")
+            shutil.copytree(FONT_DIR, work / "fonts", ignore=shutil.ignore_patterns("*.md"))
+            if video is not None:
+                cmd = preview_cmd(video.resolve(), dst.resolve(), at=at)
+            else:
+                cmd = preview_cmd(
+                    Path("."),
+                    dst.resolve(),
+                    at=0.0,
+                    lavfi=f"color=c={canvas_color}:s={width}x{height}:d=1",
+                )
+            run(cmd, cwd=work, dry_run=dry_run)
+        written.append(dst)
+
+    return written
 
 
 def burn(

@@ -137,11 +137,19 @@ class GroqEngine:
             try:
                 response = client.audio.transcriptions.create(**kwargs)
             except Exception as exc:
-                if not self._retryable(exc) or attempt == self.max_retries - 1:
-                    raise
-                last_error = exc
-                time.sleep(min(2**attempt, 8))
-                continue
+                if self._retryable(exc) and attempt < self.max_retries - 1:
+                    last_error = exc
+                    time.sleep(min(2**attempt, 8))
+                    continue
+                # Surface API failures as an engine error with a fix, not as a traceback
+                # out of the SDK. Account-level problems in particular ("organization
+                # has been restricted", quota exhausted) are not the user's mistake and
+                # should point at the local engine rather than at a stack trace.
+                raise EngineUnavailable(
+                    self.name,
+                    _api_message(exc),
+                    "use a local engine: --engine faster-whisper (or mlx on Apple Silicon)",
+                ) from exc
 
             return json.loads(response.json()) if hasattr(response, "json") else dict(response)
 
@@ -239,6 +247,17 @@ def _group_words(
         )
 
     return {i: tuple(ws) for i, ws in grouped.items() if ws}
+
+
+def _api_message(exc: Exception) -> str:
+    """A one-line reason from a Groq SDK error, without the stack."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict) and error.get("message"):
+            return str(error["message"])
+    status = getattr(exc, "status_code", None)
+    return f"API error{f' {status}' if status else ''}: {exc}".strip()
 
 
 def _opt_float(value: Any) -> float | None:

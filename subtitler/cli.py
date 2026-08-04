@@ -317,7 +317,7 @@ def _cmd_lint(args: argparse.Namespace) -> int:
 
 
 def _cmd_burn(args: argparse.Namespace) -> int:
-    from subtitler.burn import burn
+    from subtitler.burn import burn, preview
     from subtitler.media import probe
     from subtitler.pipeline import DEFAULT_CANVAS
     from subtitler.render import read_subtitles
@@ -327,6 +327,20 @@ def _cmd_burn(args: argparse.Namespace) -> int:
     cues = read_subtitles(Path(args.subs))
     width = info.width or DEFAULT_CANVAS[0]
     height = info.height or DEFAULT_CANVAS[1]
+
+    if args.preview:
+        stills = preview(
+            cues,
+            Path(args.out),
+            video=video if info.has_video else None,
+            audio=None if info.has_video else video,
+            width=width,
+            height=height,
+        )
+        for path in stills:
+            print(path)
+        print(f"\n{len(stills)} stills written. Pick one and pass --style-preset.", file=sys.stderr)
+        return 0
 
     burn(
         cues,
