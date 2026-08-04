@@ -366,8 +366,14 @@ class FasterWhisperEngine:
         )
 
         segments = []
+        # Counted, not just applied: the benchmark reports how often the decoder had to be
+        # rescued from a repetition loop, and once the transcript exists the evidence is
+        # gone by definition. Same for the silence gate below.
+        collapsed = 0
         for seg in segments_iter:  # generator: work happens here
-            text = collapse_repetition((seg.text or "").strip())
+            raw_text = (seg.text or "").strip()
+            text = collapse_repetition(raw_text)
+            collapsed += text != raw_text
             if not text:
                 continue
             segments.append(
@@ -415,6 +421,8 @@ class FasterWhisperEngine:
                 "initial_prompt": bool(self._prompt_for(opts, batch_size)),
                 "cuda_fallback": self._fallback_reason,
                 "seed": opts.seed,
+                "repetition_collapsed": collapsed,
+                "silence_dropped": len(segments) - len(kept),
             },
         )
 

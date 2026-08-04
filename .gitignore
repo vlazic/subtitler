@@ -21,6 +21,10 @@ out/
 # Benchmark outputs are committed on purpose; scratch runs are not.
 benchmarks/results/scratch*/
 
+# The matrix's shared stage cache. Kept between runs so a denoiser is not re-extracted per
+# engine, and gigabytes of WAV that nothing outside a benchmark run ever reads.
+benchmarks/.work/
+
 # Large media that is not a checked-in fixture
 benchmarks/clips/*.mp4
 benchmarks/clips/*.mov

@@ -20,10 +20,11 @@ from subtitler import __version__, postedit
 from subtitler.engines import faster as engines_faster
 
 # Subcommands land phase by phase. Anything still stubbed exits with a clear message
-# naming the phase rather than an AttributeError or a half-run pipeline.
-_PENDING = {
-    "bench": "Phase 7",
-}
+# naming the phase rather than an AttributeError or a half-run pipeline. Empty now that
+# `bench` has landed; kept because the next unimplemented surface should reuse it rather
+# than invent a second way to say the same thing. `bench agents` is Phase 8 and says so
+# itself, since the other two bench actions do work.
+_PENDING: dict[str, str] = {}
 
 
 def _not_yet(command: str) -> int:
@@ -201,9 +202,44 @@ def build_parser() -> argparse.ArgumentParser:
     p_bench = sub.add_parser("bench", help="engine and denoiser quality matrix")
     p_bench.add_argument("action", choices=["run", "report", "agents"])
     p_bench.add_argument("target", nargs="?", help="run directory, for report and agents")
-    p_bench.add_argument("--clips", default="benchmarks/clips")
+    p_bench.add_argument(
+        "--clips",
+        default=None,
+        help=(
+            "a directory or a comma-separated list of files. Default: benchmarks/clips if "
+            "it holds media, otherwise the two checked-in fixtures"
+        ),
+    )
     p_bench.add_argument("--out", default="benchmarks/results")
+    p_bench.add_argument("--references", default="benchmarks/references")
+    p_bench.add_argument(
+        "--work",
+        default="benchmarks/.work",
+        help="shared stage cache for the matrix; kept across runs on purpose",
+    )
     p_bench.add_argument("--denoise", default=None, help="restrict the denoiser axis")
+    p_bench.add_argument(
+        "--engine",
+        default=None,
+        help="restrict the engine axis. Default: every local engine usable here",
+    )
+    p_bench.add_argument("--model", default="large-v3")
+    p_bench.add_argument("--device", default="auto", help="auto | cpu | cuda")
+    p_bench.add_argument("--batch-size", type=int, default=0, metavar="N")
+    p_bench.add_argument("--lang", default="sr", help="pinned language code")
+    p_bench.add_argument(
+        "--fix",
+        action="store_true",
+        help="add the correction pass as a second axis, so each cell is measured on and off",
+    )
+    p_bench.add_argument("--fix-model", default=postedit.DEFAULT_MODEL)
+    p_bench.add_argument(
+        "--force",
+        nargs="?",
+        const="all",
+        metavar="STAGE",
+        help="invalidate the shared stage cache from a stage onwards",
+    )
     p_bench.add_argument("--allow-dirty", action="store_true")
 
     return parser
@@ -480,8 +516,76 @@ def _cmd_convert(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_bench(args: argparse.Namespace) -> int:
+    from subtitler import media
+    from subtitler.bench import run as bench
+    from subtitler.config import load_dotenv
+
+    load_dotenv()
+    root = Path.cwd()
+    out_root = Path(args.out)
+    references = Path(args.references)
+
+    def log(message: str) -> None:
+        print(message, file=sys.stderr)
+
+    if args.action == "agents":
+        # Phase 8: LLM adjudication of reference transcripts. The seam it plugs into is
+        # `bench report`, which recomputes every metric from the kept transcripts, so an
+        # adjudicated reference scores a run that already happened without re-transcribing.
+        print("subtitler bench agents: not implemented yet (lands in Phase 8)", file=sys.stderr)
+        return 2
+
+    if args.action == "report":
+        target = Path(args.target) if args.target else bench.latest_run(out_root)
+        if target is None:
+            print(f"no benchmark runs under {out_root}", file=sys.stderr)
+            return 1
+        bench.rescore(target, references=references, log=log)
+        print((target / "report.md").read_text(encoding="utf-8"))
+        return 0
+
+    clips = bench.resolve_clips(args.clips, root=root)
+    denoisers = bench.parse_axis(
+        args.denoise, valid=media.DENOISE_FILTERS, label="denoiser"
+    ) or tuple(media.DENOISE_FILTERS)
+    engines = bench.parse_axis(
+        args.engine, valid=("mlx", "faster-whisper", "groq", "groq-turbo"), label="engine"
+    )
+    if engines is None:
+        engines = bench.available_local_engines(args.model, args.device)
+        if not engines:
+            print(
+                "no local engine is usable here; run `subtitler doctor`, or name one with --engine",
+                file=sys.stderr,
+            )
+            return 1
+        log(f"engine axis: {', '.join(engines)} (auto-detected)")
+
+    cfg = bench.BenchConfig(
+        clips=clips,
+        denoisers=denoisers,
+        engines=engines,
+        model=args.model,
+        device=args.device,
+        batch_size=args.batch_size,
+        language=args.lang,
+        fix_axis=args.fix,
+        fix_model=args.fix_model,
+        out_root=out_root,
+        references=references,
+        work=Path(args.work),
+        allow_dirty=args.allow_dirty,
+        force=args.force,
+    )
+    run_dir = bench.run_matrix(cfg, repo=root, log=log)
+    print(run_dir)
+    return 0
+
+
 _HANDLERS = {
     "run": _cmd_run,
+    "bench": _cmd_bench,
     "gui": _cmd_gui,
     "doctor": _cmd_doctor,
     "models": _cmd_models,

@@ -186,8 +186,11 @@ def parse_verbose_json(
     words_by_index = _group_words(raw.get("words") or [], raw.get("segments") or [])
 
     segments = []
+    collapsed = 0
     for i, seg in enumerate(raw.get("segments") or []):
-        text = collapse_repetition((seg.get("text") or "").strip())
+        raw_text = (seg.get("text") or "").strip()
+        text = collapse_repetition(raw_text)
+        collapsed += text != raw_text
         if not text:
             continue
         segments.append(
@@ -214,6 +217,11 @@ def parse_verbose_json(
             "language": opts.language,
             "temperature": opts.temperature,
             "prompt": bool(opts.initial_prompt),
+            "repetition_collapsed": collapsed,
+            # The silence gate reads the WAV, and a cloud response arrives without one.
+            # None rather than 0: "not measured" and "measured, none" are different facts
+            # and the benchmark keeps them apart.
+            "silence_dropped": None,
         },
     )
 

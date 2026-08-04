@@ -114,8 +114,14 @@ class MlxWhisperEngine:
         runtime = time.monotonic() - started
 
         segments = []
+        # See the same counters in `faster.py`: the benchmark needs to know how often the
+        # decoder looped and how much silence filler the gate removed, and neither survives
+        # into the transcript that is kept.
+        collapsed = 0
         for seg in raw.get("segments") or []:
-            text = collapse_repetition(str(seg.get("text", "")).strip())
+            raw_text = str(seg.get("text", "")).strip()
+            text = collapse_repetition(raw_text)
+            collapsed += text != raw_text
             if not text:
                 continue
             segments.append(
@@ -154,6 +160,8 @@ class MlxWhisperEngine:
                 "temperature": opts.temperature,
                 "seed": opts.seed,
                 "passed_kwargs": sorted(kwargs),
+                "repetition_collapsed": collapsed,
+                "silence_dropped": len(segments) - len(kept),
             },
         )
 
