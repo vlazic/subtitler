@@ -42,9 +42,17 @@ jobs:
         run: |
           ffmpeg -version | head -1
           # Everything this project needs must exist on both the 4.4 Ubuntu ships and the
-          # 7.x/8.x Homebrew ships. Failing here beats failing at burn time.
-          ffmpeg -hide_banner -filters  | grep -E '^\s*\S+\s+(ass|subtitles|afftdn|arnndn|anlmdn)\s'
-          ffmpeg -hide_banner -encoders | grep -E '^\s*\S+\s+(libx264|aac)\s'
+          # 8.x Homebrew ships. Ask about each capability individually: the `-filters`
+          # table's column layout is not stable across releases, so grepping it produced
+          # a false "ass is missing" on Homebrew 8.1.
+          for f in ass subtitles afftdn arnndn anlmdn; do
+            ffmpeg -hide_banner -h "filter=$f" | head -1 | grep -q "^Filter $f" \
+              || { echo "missing filter: $f"; exit 1; }
+          done
+          for e in libx264 aac; do
+            ffmpeg -hide_banner -h "encoder=$e" | head -1 | grep -q "^Encoder $e" \
+              || { echo "missing encoder: $e"; exit 1; }
+          done
 
       - uses: astral-sh/setup-uv@v5
         with:

@@ -25,6 +25,8 @@ from subtitler.doctor import (
     check_local_engine,
     check_rosetta,
     diagnose,
+    has_encoder,
+    has_filter,
     install_plan,
     render,
 )
@@ -33,21 +35,25 @@ FFMPEG_4 = "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021"
 FFMPEG_8 = "ffmpeg version 8.0 Copyright (c) 2000-2026 the FFmpeg developers"
 FFMPEG_3 = "ffmpeg version 3.4.11-0ubuntu0.1 Copyright (c) 2000-2020"
 
-FILTERS_OK = "\n".join(
-    [
-        " TSC afftdn            A->A       Denoise audio samples using FFT.",
-        " TSC anlmdn            A->A       Reduce broadband noise.",
-        " TSC arnndn            A->A       Reduce noise from speech using RNN.",
-        " ... ass               V->V       Render ASS subtitles.",
-        " ... subtitles         V->V       Render text subtitles.",
-    ]
-)
-ENCODERS_OK = "\n".join(
-    [
-        " V....D libx264              libx264 H.264 / AVC",
-        " A....D aac                  AAC (Advanced Audio Coding)",
-    ]
-)
+
+def _filter_help(*names: str) -> dict[tuple[str, ...], str]:
+    """ffmpeg answers `-h filter=NAME` with "Filter NAME" or "Unknown filter 'NAME'."."""
+    return {
+        ("ffmpeg", "-hide_banner", "-h", f"filter={n}"): f"Filter {n}\n  Some description.\n"
+        for n in names
+    }
+
+
+def _encoder_help(*names: str) -> dict[tuple[str, ...], str]:
+    return {
+        ("ffmpeg", "-hide_banner", "-h", f"encoder={n}"): f"Encoder {n} [desc]:\n" for n in names
+    }
+
+
+CAPS_OK = {
+    **_filter_help("ass", "subtitles", "afftdn", "arnndn", "anlmdn"),
+    **_encoder_help("libx264", "aac"),
+}
 
 
 def fake_probe(
@@ -135,17 +141,12 @@ class TestFfmpegVersion:
 
 class TestFfmpegCapabilities:
     def test_libass_present(self) -> None:
-        probe = fake_probe(
-            present={"ffmpeg"}, outputs={("ffmpeg", "-hide_banner", "-filters"): FILTERS_OK}
-        )
+        probe = fake_probe(present={"ffmpeg"}, outputs=CAPS_OK)
         assert check_libass(MAC, probe).status == OK
 
     def test_libass_missing_is_a_hard_fail(self) -> None:
         """An ffmpeg without libass installs fine and then fails at burn time."""
-        probe = fake_probe(
-            present={"ffmpeg"},
-            outputs={("ffmpeg", "-hide_banner", "-filters"): " TSC afftdn A->A Denoise."},
-        )
+        probe = fake_probe(present={"ffmpeg"}, outputs=_filter_help("afftdn"))
         result = check_libass(MAC, probe)
         assert result.status == FAIL
         assert "ass" in result.detail
@@ -153,6 +154,32 @@ class TestFfmpegCapabilities:
     def test_capability_checks_skip_when_ffmpeg_is_absent(self) -> None:
         """Reporting 'libass missing' when ffmpeg itself is missing is noise."""
         assert check_libass(POP, fake_probe()).status == SKIP
+
+    def test_probe_asks_about_one_filter_at_a_time(self) -> None:
+        """Regression: parsing the `-filters` table with a regex tuned against ffmpeg 4.4
+        reported `ass` as missing on Homebrew's 8.1, where the filter was plainly present.
+        The column layout is not stable across releases; `-h filter=NAME` is."""
+        assert has_filter(fake_probe(outputs=_filter_help("ass")), "ass")
+        assert not has_filter(
+            fake_probe(
+                outputs={("ffmpeg", "-hide_banner", "-h", "filter=ass"): "Unknown filter 'ass'."}
+            ),
+            "ass",
+        )
+        assert not has_filter(fake_probe(), "ass")  # ffmpeg could not run at all
+
+    def test_encoder_probe(self) -> None:
+        assert has_encoder(fake_probe(outputs=_encoder_help("libx264")), "libx264")
+        assert not has_encoder(
+            fake_probe(
+                outputs={
+                    ("ffmpeg", "-hide_banner", "-h", "encoder=libx264"): (
+                        "Codec 'libx264' is not recognized by FFmpeg."
+                    )
+                }
+            ),
+            "libx264",
+        )
 
 
 class TestRosetta:
@@ -228,8 +255,7 @@ class TestDiagnose:
             present={"ffmpeg", "ffprobe", "uv", "fc-match"},
             outputs={
                 ("ffmpeg", "-version"): FFMPEG_4,
-                ("ffmpeg", "-hide_banner", "-filters"): FILTERS_OK,
-                ("ffmpeg", "-hide_banner", "-encoders"): ENCODERS_OK,
+                **CAPS_OK,
                 ("uv", "--version"): "uv 0.8.15",
             },
             modules={"faster_whisper", "groq"},

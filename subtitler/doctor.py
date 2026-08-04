@@ -253,19 +253,35 @@ def check_ffprobe(plat: Platform, probe: Probe) -> CheckResult:
     return CheckResult(OK) if probe.which("ffprobe") else CheckResult(FAIL, detail="not on PATH")
 
 
-def _ffmpeg_lists(probe: Probe, flag: str, names: Sequence[str]) -> tuple[list[str], list[str]]:
-    out = probe.output(["ffmpeg", "-hide_banner", flag]) or ""
+def has_filter(probe: Probe, name: str) -> bool:
+    """Ask ffmpeg about one filter rather than parsing the `-filters` table.
+
+    The table's column layout is not stable across releases: a regex tuned against the
+    4.4 output reported `ass` as missing on Homebrew's 8.1 even though the filter was
+    plainly there, which the macOS CI job surfaced as a phantom required-dependency
+    failure. `-h filter=NAME` prints "Filter NAME" or "Unknown filter 'NAME'." on every
+    version, so there is nothing to keep in sync.
+    """
+    out = probe.output(["ffmpeg", "-hide_banner", "-h", f"filter={name}"]) or ""
+    return out.lstrip().startswith(f"Filter {name}")
+
+
+def has_encoder(probe: Probe, name: str) -> bool:
+    out = probe.output(["ffmpeg", "-hide_banner", "-h", f"encoder={name}"]) or ""
+    return out.lstrip().startswith(f"Encoder {name}")
+
+
+def _partition(probe: Probe, names: Sequence[str], test) -> tuple[list[str], list[str]]:
     found, missing = [], []
     for name in names:
-        pattern = rf"^\s*\S+\s+{re.escape(name)}\s"
-        (found if re.search(pattern, out, re.MULTILINE) else missing).append(name)
+        (found if test(probe, name) else missing).append(name)
     return found, missing
 
 
 def check_libass(plat: Platform, probe: Probe) -> CheckResult:
     if not probe.which("ffmpeg"):
         return CheckResult(SKIP, detail="ffmpeg is missing")
-    _, missing = _ffmpeg_lists(probe, "-filters", ["ass", "subtitles"])
+    _, missing = _partition(probe, ["ass", "subtitles"], has_filter)
     if missing:
         return CheckResult(FAIL, detail=f"ffmpeg built without: {', '.join(missing)}")
     return CheckResult(OK, detail="ass, subtitles")
@@ -274,7 +290,7 @@ def check_libass(plat: Platform, probe: Probe) -> CheckResult:
 def check_encoders(plat: Platform, probe: Probe) -> CheckResult:
     if not probe.which("ffmpeg"):
         return CheckResult(SKIP, detail="ffmpeg is missing")
-    _, missing = _ffmpeg_lists(probe, "-encoders", ["libx264", "aac"])
+    _, missing = _partition(probe, ["libx264", "aac"], has_encoder)
     if missing:
         return CheckResult(FAIL, detail=f"ffmpeg built without: {', '.join(missing)}")
     return CheckResult(OK, detail="libx264, aac")
@@ -283,7 +299,7 @@ def check_encoders(plat: Platform, probe: Probe) -> CheckResult:
 def check_denoise_filters(plat: Platform, probe: Probe) -> CheckResult:
     if not probe.which("ffmpeg"):
         return CheckResult(SKIP, detail="ffmpeg is missing")
-    found, missing = _ffmpeg_lists(probe, "-filters", ["afftdn", "arnndn", "anlmdn"])
+    found, missing = _partition(probe, ["afftdn", "arnndn", "anlmdn"], has_filter)
     if missing:
         return CheckResult(WARN, detail=f"unavailable: {', '.join(missing)}")
     return CheckResult(OK, detail=", ".join(found))

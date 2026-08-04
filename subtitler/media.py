@@ -237,31 +237,3 @@ def ffmpeg_version() -> tuple[int, int] | None:
 def supports_fps_mode(version: tuple[int, int] | None) -> bool:
     """`-fps_mode` replaced `-vsync` in ffmpeg 5.0. Both exist in 5.x; only one in 4.x."""
     return bool(version and version[0] >= 5)
-
-
-def has_filter(name: str) -> bool:
-    try:
-        proc = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-filters"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return bool(re.search(rf"^\s*\S+\s+{re.escape(name)}\s", proc.stdout or "", re.MULTILINE))
-
-
-def has_encoder(name: str) -> bool:
-    try:
-        proc = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-encoders"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return bool(re.search(rf"^\s*\S+\s+{re.escape(name)}\s", proc.stdout or "", re.MULTILINE))
