@@ -33,6 +33,29 @@ def _module_available(name: str) -> bool:
         return False
 
 
+def tk_importable() -> bool:
+    """Whether this interpreter can build a native window.
+
+    A real import and **not** `_module_available("tkinter")`. `tkinter` is a pure-Python
+    package that ships with every CPython source tree, so `find_spec` finds it on exactly
+    the builds this question exists for; what a Tk-less build lacks is the compiled
+    `_tkinter` extension that package imports on its first line.
+
+    Importing it opens no display and creates no window - only `Tk()` connects to one - so
+    this is safe on a headless box and on both CI runners.
+    """
+    try:
+        import tkinter  # noqa: F401
+    except Exception:
+        # Deliberately not just ImportError: a half-installed Tcl/Tk fails inside the
+        # extension's own initialisation, and the answer for the caller is the same.
+        return False
+    return True
+
+
+_TK_IMPORTABLE = tk_importable
+
+
 # Homebrew's prefix differs by architecture and we never hardcode it, but we do need
 # somewhere to look when `brew` is not on PATH at all.
 _BREW_CANDIDATES = (Path("/opt/homebrew"), Path("/usr/local"))
@@ -102,6 +125,11 @@ class Probe:
     env: Mapping[str, str] = field(default_factory=lambda: os.environ)
     module_available: Callable[[str], bool] = _module_available
     python_version: tuple[int, int] = field(default_factory=lambda: sys.version_info[:2])
+    # Its own entry rather than `module_available("tkinter")`, because the two answer
+    # different questions on the interpreter that matters. See `tk_importable`. The
+    # default is spelled through a module-level alias so the class attribute of the same
+    # name cannot be mistaken for a recursive reference to itself.
+    tk_importable: Callable[[], bool] = _TK_IMPORTABLE
 
     def output(self, cmd: Sequence[str], *, timeout: int = 30) -> str | None:
         """Run a command and return stdout+stderr, or None if it could not run."""
@@ -319,6 +347,35 @@ def check_python(plat: Platform, probe: Probe) -> CheckResult:
     if (major, minor) < (3, 12):
         return CheckResult(FAIL, label, "3.12 or newer is required")
     return CheckResult(OK, label)
+
+
+def check_tkinter(plat: Platform, probe: Probe) -> CheckResult:
+    """Whether `subtitler gui` opens the native window or falls back to the browser page.
+
+    This is a **warning and never a failure**, and the reason is the whole shape of the GUI:
+    a machine without Tk still gets a working interface, just the browser one. Nothing is
+    broken, so nothing here may turn `doctor` red or send anyone to `--install`.
+
+    Tk is a property of the interpreter *build*, not of this project, and there is nothing
+    a dependency list could do about it: `_tkinter` is a C extension compiled into the
+    interpreter against the system Tcl/Tk, so it has no PyPI package, and every toolkit
+    that does (PySide6, wxPython, pywebview) is a compiled wheel and therefore forbidden by
+    non-negotiable 6. The answer is to detect it and say the right sentence.
+
+    Verified rather than assumed, because the numbers decide how loud this should be:
+    `.python-version` pins 3.12 and `make setup` goes through uv, whose
+    python-build-standalone distributions bundle Tk 8.6 on macOS and Linux both, and the
+    python.org installer ships it too. So the documented setup already has a window, on the
+    primary target included. What is left is a Homebrew `python@3.12` (which does not pull
+    `python-tk@3.12`) and a Debian or Ubuntu system Python: real machines, reached by
+    bypassing the documented setup, and each one formula away from a native window.
+    """
+    if probe.tk_importable():
+        return CheckResult(OK, detail="the native window is available")
+    return CheckResult(
+        WARN,
+        detail="this Python has no tkinter, so `subtitler gui` opens the browser page instead",
+    )
 
 
 def check_fontconfig(plat: Platform, probe: Probe) -> CheckResult:
@@ -542,6 +599,21 @@ DEPS: tuple[Dep, ...] = (
         why="3.12 or newer",
         check=check_python,
         manual="uv python install 3.12",
+    ),
+    Dep(
+        key="tkinter",
+        label="native window",
+        # Never required. Without it `subtitler gui` opens the browser page, which is a
+        # working GUI, so a missing Tk is a downgrade and not a broken install.
+        required=False,
+        why="the desktop window; without it `subtitler gui` opens the browser page",
+        check=check_tkinter,
+        # Versioned on purpose: `python-tk@3.12` is the formula that adds Tk to Homebrew's
+        # `python@3.12`, which is the interpreter `.python-version` pins.
+        brew="python-tk@3.12",
+        apt="python3-tk",
+        manual="install your Python distribution's Tk bindings, "
+        "or use the uv-managed Python `make setup` installs, which bundles them",
     ),
     Dep(
         key="fontconfig",

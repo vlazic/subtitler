@@ -176,17 +176,34 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--dry-run", action="store_true", help="print commands, execute nothing")
     p_run.add_argument("--json", action="store_true", help="machine-readable summary on stdout")
 
-    p_gui = sub.add_parser("gui", help="open the graphical interface in your browser")
-    p_gui.add_argument("--port", type=int, default=0, help="0 (the default) picks a free port")
+    p_gui = sub.add_parser("gui", help="open the graphical interface")
+    p_gui.add_argument(
+        "--web",
+        action="store_true",
+        help="use the browser interface instead of the native window",
+    )
+    # The three below only mean anything to the browser interface, which is why they are
+    # documented as such rather than silently ignored by the window.
+    p_gui.add_argument(
+        "--port", type=int, default=0, help="--web only: 0 (the default) picks a free port"
+    )
     p_gui.add_argument(
         "--host",
         default="127.0.0.1",
-        help="loopback by default; anything else exposes your files to the network",
+        help="--web only: loopback by default; anything else exposes your files to the network",
     )
     p_gui.add_argument(
         "--no-browser",
         action="store_true",
-        help="print the address instead of opening a browser",
+        help="--web only: print the address instead of opening a browser",
+    )
+
+    p_install = sub.add_parser(
+        "install-app",
+        help="put a double-clickable Subtitler icon in Applications (macOS) or the app menu",
+    )
+    p_install.add_argument(
+        "--dry-run", action="store_true", help="list what would be written, and write nothing"
     )
 
     # `run URL` covers the common case on its own, so this exists for the other one:
@@ -389,13 +406,61 @@ def _cmd_fetch(args: argparse.Namespace) -> int:
 
 
 def _cmd_gui(args: argparse.Namespace) -> int:
+    """The native window by default, the browser page on request or as a fallback.
+
+    Two front ends exist because Tk is a property of the interpreter *build*: a uv-managed
+    or python.org Python ships it, and a Homebrew `python@3.12` without `python-tk` does
+    not. Rather than failing at `import tkinter` in front of the least technical user this
+    project has, a machine without Tk gets one sentence and the browser page, which is in
+    every build.
+    """
     from subtitler.config import load_dotenv
+    from subtitler.gui.session import NO_DISPLAY, TK_MISSING, tk_available
+
+    # Same as `run`: the correction pass reads its API key from .env, and both front ends
+    # offer the same checkbox, so the key has to be loaded before either starts.
+    load_dotenv()
+
+    if not args.web:
+        if tk_available():
+            from subtitler.gui.window import run_window
+
+            code = run_window()
+            if code == 0:
+                return 0
+            # A Tk that imports but cannot open a window means there is nothing to open it
+            # on, which is the one case where the browser page is genuinely better.
+            print(NO_DISPLAY, file=sys.stderr)
+        else:
+            print(TK_MISSING, file=sys.stderr)
+
     from subtitler.gui.server import serve
 
-    # Same as `run`: the correction pass reads its API key from .env, and the GUI offers
-    # the same checkbox, so the key has to be loaded before the server starts.
-    load_dotenv()
     return serve(host=args.host, port=args.port, open_browser=not args.no_browser)
+
+
+def _cmd_install_app(args: argparse.Namespace) -> int:
+    """Create the icon the friend double-clicks, and say what macOS will do about it."""
+    from subtitler import launcher
+    from subtitler.doctor import detect_platform
+
+    try:
+        plan = launcher.plan(detect_platform(), home=Path.home())
+    except launcher.LauncherError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    if args.dry_run:
+        print(f"would create {plan.target}")
+        for path in plan.paths():
+            print(f"  {path}")
+        return 0
+
+    launcher.install(plan)
+    print(f"created {plan.target}")
+    for note in plan.notes:
+        print()
+        print(note)
+    return 0
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -685,6 +750,7 @@ _HANDLERS = {
     "fetch": _cmd_fetch,
     "bench": _cmd_bench,
     "gui": _cmd_gui,
+    "install-app": _cmd_install_app,
     "doctor": _cmd_doctor,
     "models": _cmd_models,
     "lint": _cmd_lint,

@@ -29,11 +29,13 @@ from subtitler.doctor import (
     check_libass,
     check_local_engine,
     check_rosetta,
+    check_tkinter,
     diagnose,
     has_encoder,
     has_filter,
     install_plan,
     render,
+    tk_importable,
 )
 
 FFMPEG_4 = "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021"
@@ -68,6 +70,7 @@ def fake_probe(
     modules: set[str] | None = None,
     env: dict[str, str] | None = None,
     python: tuple[int, int] = (3, 12),
+    tk: bool = True,
 ) -> Probe:
     present = present if present is not None else set()
     outputs = outputs or {}
@@ -82,6 +85,9 @@ def fake_probe(
         env=env or {},
         module_available=lambda name: name in modules,
         python_version=python,
+        # Faked like everything else, and defaulted to present, so that the rest of this
+        # file reports the same thing on a machine with Tk and a machine without it.
+        tk_importable=lambda: tk,
     )
 
 
@@ -327,6 +333,71 @@ class TestGpu:
             blocking = {s.dep.key for s in statuses if s.blocking}
             assert "gpu" not in blocking
             assert "cuda" not in blocking
+
+
+class TestNativeWindow:
+    """The one dependency whose absence is a downgrade rather than a failure.
+
+    Without Tk, `subtitler gui` opens the browser page instead of the desktop window, so
+    everything still works. That is why this check may never turn `doctor` red.
+
+    It names the formula anyway. The documented setup goes through uv, whose interpreters
+    bundle Tk, so a machine reaching this branch got its Python somewhere else - a Homebrew
+    `python@3.12` or a Debian system Python - and the unhandled symptom there is
+    `ImportError: No module named '_tkinter'`, which names nothing anybody can act on.
+    """
+
+    def test_an_interpreter_with_tk_is_simply_ok(self) -> None:
+        assert check_tkinter(MAC, fake_probe(tk=True)).status == OK
+
+    def test_a_homebrew_python_without_tk_warns_and_is_never_blocking(self) -> None:
+        statuses = diagnose(MAC, fake_probe(tk=False), DEPS)
+        tk_status = next(s for s in statuses if s.dep.key == "tkinter")
+        assert tk_status.result.status == WARN
+        assert tk_status.blocking is False
+
+    def test_the_warning_names_the_command_for_this_platform(self) -> None:
+        """A user reading it has no window, so the sentence has to be self-contained and
+        has to be right for the machine they are on."""
+        tk_dep = next(d for d in DEPS if d.key == "tkinter")
+        assert tk_dep.fix_for(MAC) == "brew install python-tk@3.12"
+        assert tk_dep.fix_for(POP) == "sudo apt install -y python3-tk"
+        # No package manager at all still gets an instruction rather than an empty line.
+        assert "Tk" in tk_dep.fix_for(ARCH)
+
+    def test_the_report_says_what_happens_instead_of_the_window(self) -> None:
+        text = render(diagnose(MAC, fake_probe(tk=False), DEPS), MAC)
+        assert "brew install python-tk@3.12" in text
+        assert "browser" in text
+
+    def test_a_missing_tk_never_sends_anyone_to_the_installer(self) -> None:
+        """`doctor` prints "N required dependencies missing" only for blockers, and a
+        machine whose only complaint is Tk has a perfectly working install."""
+        healthy = fake_probe(
+            present={"ffmpeg", "ffprobe", "uv", "fc-match"},
+            outputs={
+                ("ffmpeg", "-version"): FFMPEG_4,
+                **CAPS_OK,
+                ("uv", "--version"): "uv 0.8.15",
+            },
+            modules={"faster_whisper", "groq"},
+            env={"GROQ_API_KEY": "x"},
+            tk=False,
+        )
+        statuses = diagnose(POP, healthy, DEPS)
+        assert not [s for s in statuses if s.blocking]
+        assert "all required dependencies present" in render(statuses, POP)
+
+    def test_the_real_probe_answers_by_importing_rather_than_by_finding_the_spec(self) -> None:
+        """`find_spec("tkinter")` says yes on a build with no `_tkinter`, which is exactly
+        the build the question exists for. Asserted against the real import."""
+        expected = True
+        try:
+            import tkinter  # noqa: F401
+        except Exception:
+            expected = False
+        assert tk_importable() is expected
+        assert Probe().tk_importable() is expected
 
 
 class TestFixes:

@@ -45,6 +45,14 @@ RNNOISE_MODEL = Path(__file__).parent / "assets" / "rnnoise" / "sh.rnnn"
 # colon: see `denoise_audio`.
 RNNOISE_LOCAL_NAME = "rnnoise.rnnn"
 
+# ffmpeg's own player, which every ffmpeg build this project accepts ships alongside it.
+# Only the cue editor uses it, and only to hear one cue at a time.
+PLAYER = "ffplay"
+
+# The shortest span worth asking a player for. A cue can be a fraction of a second, and
+# ffplay rounds a duration to about 10 ms, so zero would play silence.
+MIN_PLAY_SPAN = 0.05
+
 
 class MediaError(RuntimeError):
     """ffmpeg or ffprobe failed, or the input is not usable."""
@@ -193,6 +201,40 @@ def trim_cmd(src: Path, dst: Path, *, start: float = 0.0, end: float | None = No
     # otherwise fine stream copy fail on a container change, and neither is transcribed.
     cmd += ["-c", "copy", "-avoid_negative_ts", "make_zero", "-sn", "-dn", str(dst)]
     return cmd
+
+
+def play_span_cmd(src: Path, *, start: float, end: float) -> list[str]:
+    """Play the span one cue covers, and nothing else.
+
+    Here rather than in the GUI because ffplay is ffmpeg: non-negotiable 1 says every
+    invocation is built by a function with a command-construction test, and "it only
+    plays audio" is not an exemption. The editor uses it because reading speed is the one
+    number in the quality report a human cannot judge by eye.
+
+    * **`-ss` before `-i`**, for the same reason `trim_cmd` does it: a demuxer seek rather
+      than decoding an hour to reach minute 58.
+    * **`-nodisp`.** The input is a WAV, but ffplay opens an SDL window for the waveform
+      even so, and a second window appearing over the editor is not what "listen" means.
+    * **`-autoexit`.** Without it ffplay sits there after the span has finished and the
+      next click starts a second one on top of it.
+    * A floor under the duration, because a cue can be shorter than the 10 ms ffplay
+      rounds to and a request for zero seconds plays nothing at all.
+    """
+    if start < 0:
+        raise MediaError(f"start must not be negative, got {start}")
+    return [
+        PLAYER,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nodisp",
+        "-autoexit",
+        "-ss",
+        f"{start:.3f}",
+        "-t",
+        f"{max(end - start, MIN_PLAY_SPAN):.3f}",
+        str(src),
+    ]
 
 
 def parse_timecode(value: str) -> float:

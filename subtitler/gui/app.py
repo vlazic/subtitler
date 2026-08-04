@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import mimetypes
-import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,10 +24,10 @@ from typing import Any
 
 from subtitler import __version__, doctor, media, models
 from subtitler import edits as edits_mod
-from subtitler.gui import files, forms, jobs
+from subtitler.gui import files, forms, jobs, session
 from subtitler.gui.jobs import JobManager
 from subtitler.model import Cue
-from subtitler.pipeline import output_dir, run_pipeline, work_dir
+from subtitler.pipeline import output_dir, run_pipeline
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -83,10 +82,6 @@ def _error(message: str, status: int = 400, **extra: Any) -> Response:
     return _json({"error": message, **extra}, status)
 
 
-def _default_opener(argv: Sequence[str]) -> None:
-    subprocess.Popen(list(argv), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-
 class GuiApp:
     def __init__(
         self,
@@ -104,7 +99,7 @@ class GuiApp:
         self.home = home or Path.home()
         self._runner = runner or run_pipeline
         self._spawn = spawn or jobs.thread_spawn
-        self._opener = opener or _default_opener
+        self._opener = opener or session.default_opener
         self._diagnose = diagnose or (lambda p: doctor.diagnose(p))
         self.jobs = JobManager(spawn=self._spawn)
         self._doctor_report: dict[str, Any] | None = None
@@ -405,21 +400,12 @@ class GuiApp:
             return _json({"ok": False, **exc.to_dict()}, 400)
 
         try:
-            edit_set = edits_mod.build(payload.get("base_key", ""), payload.get("edits") or {})
-        except edits_mod.EditError as exc:
+            # Shared with the native window rather than written twice. The clearing half
+            # is the reason: nothing was corrected this time, so a set left over from a
+            # previous pass must not be applied behind the user's back.
+            session.stage_edits(cfg, payload.get("base_key", ""), payload.get("edits") or {})
+        except (edits_mod.EditError, media.MediaError) as exc:
             return _error(str(exc))
-
-        try:
-            work = work_dir(cfg)
-        except media.MediaError as exc:
-            return _error(str(exc))
-
-        if edit_set:
-            edits_mod.save(work, edit_set)
-        else:
-            # Nothing was corrected this time, so a set left over from a previous pass
-            # must not be applied behind the user's back.
-            edits_mod.clear(work)
         return self._start_run(cfg)
 
     def _media(self, headers: Mapping[str, str]) -> Response:

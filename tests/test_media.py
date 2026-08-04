@@ -353,3 +353,36 @@ class TestDenoiseExecution:
             media.denoise_audio(
                 extracted, tmp_path / "o.wav", preset="arnndn", rnnoise_model=tmp_path / "gone.rnnn"
             )
+
+
+class TestPlaySpanCmd:
+    """The cue editor's Listen button, built here because ffplay is ffmpeg.
+
+    Non-negotiable 1: every invocation comes out of a function with a
+    command-construction test, and "it only plays audio" is not an exemption.
+    """
+
+    def test_it_asks_for_the_span_and_nothing_around_it(self):
+        cmd = media.play_span_cmd(Path("/tmp/a.wav"), start=12.5, end=15.0)
+        assert cmd[0] == media.PLAYER
+        assert cmd[-1] == "/tmp/a.wav"
+        assert cmd[cmd.index("-ss") + 1] == "12.500"
+        # A duration, not an end: `-to` after a seek does not mean the same thing on
+        # ffmpeg 4.4 and 8.x, and this project supports both.
+        assert cmd[cmd.index("-t") + 1] == "2.500"
+        assert "-to" not in cmd
+
+    def test_it_never_opens_a_window_of_its_own(self):
+        """ffplay opens an SDL window for the waveform even on a WAV, and a second window
+        appearing over the editor is not what Listen means."""
+        assert "-nodisp" in media.play_span_cmd(Path("a.wav"), start=0, end=1)
+        assert "-autoexit" in media.play_span_cmd(Path("a.wav"), start=0, end=1)
+
+    def test_a_cue_shorter_than_the_players_resolution_still_plays(self):
+        """ffplay rounds a duration to about 10 ms, so asking for zero plays silence."""
+        cmd = media.play_span_cmd(Path("a.wav"), start=1.0, end=1.0)
+        assert float(cmd[cmd.index("-t") + 1]) >= media.MIN_PLAY_SPAN
+
+    def test_a_negative_start_is_refused_rather_than_passed_on(self):
+        with pytest.raises(MediaError):
+            media.play_span_cmd(Path("a.wav"), start=-1.0, end=2.0)
