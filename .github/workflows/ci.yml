@@ -166,16 +166,21 @@ jobs:
           cmp /tmp/local/tiny-10s.srt /tmp/batched/tiny-10s.srt
 
       - name: GUI over a real socket
-        # The GUI is a local web page rather than a Tk window largely because of this
-        # step: both runners are headless and macOS has no Xvfb, so a Tk GUI could not be
-        # exercised on the primary target at all. Here the real server binds, serves the
-        # page, answers the API and reports the machine's dependencies, on both platforms,
-        # with no display anywhere.
+        # The browser front end, driven over a real socket: the server binds, serves the
+        # page, answers the API and reports the machine's dependencies, on both platforms.
+        # This is the half of the GUI a runner can exercise. The native window is covered
+        # by `tests/test_desktop.py`, which drives everything it delegates without opening
+        # one, because a window cannot be clicked here.
         #
-        # `--no-browser` matters: `webbrowser.open` on a headless runner would either hang
-        # or spawn something nobody closes.
+        # **`--web` is required and is not decoration.** `subtitler gui` opens the native
+        # window now, and uv's Python bundles Tk on both runners, so without it this step
+        # asks for a window, gets one (or a Tk that will not give up), and waits for a
+        # token that is never printed. That is exactly how it failed once.
+        #
+        # `--no-browser` matters too: `webbrowser.open` on a headless runner would either
+        # hang or spawn something nobody closes.
         run: |
-          uv run subtitler gui --port 8765 --no-browser > /tmp/gui.log 2>&1 &
+          uv run subtitler gui --web --port 8765 --no-browser > /tmp/gui.log 2>&1 &
           for i in $(seq 1 40); do grep -q 'http://' /tmp/gui.log && break; sleep 0.5; done
           cat /tmp/gui.log
           TOKEN=$(grep -o 't=[A-Za-z0-9_-]*' /tmp/gui.log | head -1 | cut -d= -f2)

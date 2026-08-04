@@ -723,6 +723,11 @@ class Window:
         self.log.delete("1.0", "end")
         self.log.configure(state="disabled")
         self.progress.configure(maximum=max(len(self.session.stages), 1), value=0)
+        # The previous run's files go too. They are still on disk, but offering to reveal
+        # them while a new run is overwriting them points at the wrong thing.
+        self.results.delete(*self.results.get_children())
+        self.result_show.configure(state="disabled")
+        self.result_summary.configure(text="This run has not finished yet.")
         self._say("")
 
     def _refuse(self, refusal: session_mod.Refusal) -> None:

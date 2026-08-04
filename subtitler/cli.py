@@ -182,20 +182,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="use the browser interface instead of the native window",
     )
-    # The three below only mean anything to the browser interface, which is why they are
-    # documented as such rather than silently ignored by the window.
+    # The three below belong to the browser interface, and asking for one of them is
+    # asking for it: `web_wanted` treats any of them as an implied `--web`. They default
+    # to None rather than to their real defaults precisely so "was this passed" is a
+    # question that can be answered. Nobody types `--no-browser` at a window.
     p_gui.add_argument(
-        "--port", type=int, default=0, help="--web only: 0 (the default) picks a free port"
+        "--port", type=int, default=None, help="implies --web: 0 (the default) picks a free port"
     )
     p_gui.add_argument(
         "--host",
-        default="127.0.0.1",
-        help="--web only: loopback by default; anything else exposes your files to the network",
+        default=None,
+        help="implies --web: loopback by default; anything else exposes your files to the network",
     )
     p_gui.add_argument(
         "--no-browser",
         action="store_true",
-        help="--web only: print the address instead of opening a browser",
+        help="implies --web: print the address instead of opening a browser",
     )
 
     p_install = sub.add_parser(
@@ -405,6 +407,19 @@ def _cmd_fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+def web_wanted(args: argparse.Namespace) -> bool:
+    """Whether this invocation is asking for the browser page.
+
+    `--web` says so, and so does any flag that only the browser page has: a port, a host,
+    or `--no-browser`. Nobody types `--no-browser` at a window, and treating those as an
+    implied `--web` is the difference between serving what was asked for and opening a
+    window that then waits forever for somebody to close it. CI asked for a port and got a
+    window exactly once, which is why this is a function with a test rather than a
+    condition inline.
+    """
+    return bool(args.web or args.no_browser or args.port is not None or args.host is not None)
+
+
 def _cmd_gui(args: argparse.Namespace) -> int:
     """The native window by default, the browser page on request or as a fallback.
 
@@ -421,7 +436,7 @@ def _cmd_gui(args: argparse.Namespace) -> int:
     # offer the same checkbox, so the key has to be loaded before either starts.
     load_dotenv()
 
-    if not args.web:
+    if not web_wanted(args):
         if tk_available():
             from subtitler.gui.window import run_window
 
@@ -436,7 +451,11 @@ def _cmd_gui(args: argparse.Namespace) -> int:
 
     from subtitler.gui.server import serve
 
-    return serve(host=args.host, port=args.port, open_browser=not args.no_browser)
+    return serve(
+        host=args.host if args.host is not None else "127.0.0.1",
+        port=args.port if args.port is not None else 0,
+        open_browser=not args.no_browser,
+    )
 
 
 def _cmd_install_app(args: argparse.Namespace) -> int:

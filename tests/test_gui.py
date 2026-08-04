@@ -1281,15 +1281,53 @@ class TestOverHttp:
 # --------------------------------------------------------------------------------------
 
 
-def test_the_gui_subcommand_exists_and_defaults_to_loopback() -> None:
+def test_the_gui_subcommand_exists_and_leaves_the_server_flags_unset() -> None:
+    """`None` and not the real defaults, so "was this passed" can be answered.
+
+    The defaults themselves are applied in `_cmd_gui` at the point of calling `serve`.
+    """
     from subtitler.cli import _HANDLERS, build_parser
 
     args = build_parser().parse_args(["gui"])
     assert args.command == "gui"
-    assert args.host == "127.0.0.1"
-    assert args.port == 0
+    assert args.host is None
+    assert args.port is None
     assert args.no_browser is False
+    assert args.web is False
     assert "gui" in _HANDLERS
+
+
+def test_asking_for_anything_only_the_page_has_asks_for_the_page() -> None:
+    """`subtitler gui` opens the native window, so a run that wanted the server and said
+    so only by passing a port used to get a window and hang waiting for a token that was
+    never printed. That is how CI broke: nobody types `--no-browser` at a window."""
+    from subtitler.cli import build_parser, web_wanted
+
+    parser = build_parser()
+    for argv in (
+        ["gui", "--web"],
+        ["gui", "--port", "8765"],
+        ["gui", "--host", "0.0.0.0"],
+        ["gui", "--no-browser"],
+        ["gui", "--port", "8765", "--no-browser"],
+    ):
+        assert web_wanted(parser.parse_args(argv)) is True, argv
+    assert web_wanted(parser.parse_args(["gui"])) is False
+
+
+def test_the_default_port_and_host_survive_the_sentinel(monkeypatch) -> None:
+    """A free port and loopback still reach `serve`, which is what they meant before they
+    became `None` so that "was this passed" could be answered."""
+    from subtitler.cli import _cmd_gui, build_parser
+
+    seen: dict = {}
+    monkeypatch.setattr(server_mod, "serve", lambda **kw: seen.update(kw) or 0)
+
+    assert _cmd_gui(build_parser().parse_args(["gui", "--web"])) == 0
+    assert seen == {"host": "127.0.0.1", "port": 0, "open_browser": True}
+
+    _cmd_gui(build_parser().parse_args(["gui", "--host", "0.0.0.0", "--port", "9", "--no-browser"]))
+    assert seen == {"host": "0.0.0.0", "port": 9, "open_browser": False}
 
 
 def test_the_page_ships_with_the_package() -> None:

@@ -125,9 +125,10 @@ page deliberately, and `subtitler doctor` reports the toolkit as a warning rathe
 failure, because nothing is actually broken without it.
 
 For the page: `--port N` pins the port (the default picks a free one) and `--no-browser`
-just prints the address. Do not pass `--host` unless you mean it: the page can read and
-write files anywhere your user can, and binding to anything but loopback hands that to your
-network.
+just prints the address. Each of those implies `--web`, since a window has no port and
+nobody asks a window not to open a browser. Do not pass `--host` unless you mean it: the
+page can read and write files anywhere your user can, and binding to anything but loopback
+hands that to your network.
 
 ## Checking the subtitles before the video is made
 
