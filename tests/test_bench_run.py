@@ -424,12 +424,12 @@ class TestWiring:
 
         assert build_parser().parse_args(["bench", "run"]).clips is None
 
-    def test_agents_is_still_phase_8(self, capsys):
-        """The seam this phase deliberately stops at."""
+    def test_agents_with_no_run_to_adjudicate_says_so(self, tmp_path, capsys):
+        """`bench agents` reads a finished run; with none under `--out` it is an error."""
         from subtitler.cli import main
 
-        assert main(["bench", "agents"]) == 2
-        assert "Phase 8" in capsys.readouterr().err
+        assert main(["bench", "agents", "--out", str(tmp_path)]) == 1
+        assert "no benchmark runs" in capsys.readouterr().err
 
 
 class TestRunDirName:

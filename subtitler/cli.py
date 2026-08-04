@@ -21,9 +21,8 @@ from subtitler.engines import faster as engines_faster
 
 # Subcommands land phase by phase. Anything still stubbed exits with a clear message
 # naming the phase rather than an AttributeError or a half-run pipeline. Empty now that
-# `bench` has landed; kept because the next unimplemented surface should reuse it rather
-# than invent a second way to say the same thing. `bench agents` is Phase 8 and says so
-# itself, since the other two bench actions do work.
+# `bench` has landed, `bench agents` included; kept because the next unimplemented surface
+# should reuse it rather than invent a second way to say the same thing.
 _PENDING: dict[str, str] = {}
 
 
@@ -275,6 +274,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="add the correction pass as a second axis, so each cell is measured on and off",
     )
     p_bench.add_argument("--fix-model", default=postedit.DEFAULT_MODEL)
+    p_bench.add_argument(
+        "--merge",
+        action="store_true",
+        help=(
+            "for `agents`: read the responses back, validate them, and write "
+            "benchmarks/references/. Without it, `agents` only emits the task manifest"
+        ),
+    )
     p_bench.add_argument(
         "--force",
         nargs="?",
@@ -598,11 +605,33 @@ def _cmd_bench(args: argparse.Namespace) -> int:
         print(message, file=sys.stderr)
 
     if args.action == "agents":
-        # Phase 8: LLM adjudication of reference transcripts. The seam it plugs into is
-        # `bench report`, which recomputes every metric from the kept transcripts, so an
-        # adjudicated reference scores a run that already happened without re-transcribing.
-        print("subtitler bench agents: not implemented yet (lands in Phase 8)", file=sys.stderr)
-        return 2
+        # LLM adjudication of reference transcripts. The seam it plugs into is `bench
+        # report`, which recomputes every metric from the kept transcripts, so an adjudicated
+        # reference scores a run that already happened without re-transcribing.
+        from subtitler.bench import agents as bench_agents
+
+        target = Path(args.target) if args.target else bench.latest_run(out_root)
+        if target is None:
+            print(f"no benchmark runs under {out_root}", file=sys.stderr)
+            return 1
+        if args.merge:
+            summary = bench_agents.merge(target, references=references, log=log)
+            print(json.dumps(summary, ensure_ascii=False, indent=2))
+            # A task still owed a response is not a failure, so it does not fail the command;
+            # a task that used up its retry is, because that clip now has no reference.
+            return 1 if summary["failed"] else 0
+        manifest = bench_agents.plan(target)
+        if not [t for t in manifest["tasks"] if t["role"] == bench_agents.ADJUDICATOR]:
+            print(
+                f"{target} has no clip with two usable engine transcripts to adjudicate",
+                file=sys.stderr,
+            )
+            return 1
+        path = bench_agents.write_plan(target, manifest)
+        log(f"wrote {path}: {len(manifest['tasks'])} task(s)")
+        log("run each task's prompt, then: subtitler bench agents <run> --merge")
+        print(path)
+        return 0
 
     if args.action == "report":
         target = Path(args.target) if args.target else bench.latest_run(out_root)

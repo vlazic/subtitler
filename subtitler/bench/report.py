@@ -127,6 +127,7 @@ def _caveats(
             f"derived from it is marked `{PROVISIONAL}` and is provisional: an unverified "
             "reference measures agreement between models, not correctness.",
         ]
+        lines += _pseudo_reference_notes(references, unverified)
     if not any_reference:
         lines += [
             "- **The leaderboard below is ordered by realtime factor, not by quality.** "
@@ -155,6 +156,36 @@ def _caveats(
             "pass improve WER or hurt it) is untouched here.",
         ]
     return [*lines, ""]
+
+
+def _pseudo_reference_notes(references: dict[str, Any], clips: Sequence[str]) -> list[str]:
+    """What an adjudicated reference is, next to the numbers derived from it.
+
+    Rendered from `meta.json` rather than written by hand, because the caveat has to be false
+    to write down when it stops being true: a clip whose reference was transcribed by a human
+    never reaches this function, and one adjudicated from three engines says three here.
+    """
+    lines = []
+    for clip_id in clips:
+        meta = references.get(clip_id) or {}
+        if not meta.get("adjudicated"):
+            continue
+        engines = ", ".join(f"`{e}`" for e in meta.get("engines", [])) or "several engines"
+        spans = int(meta.get("spans_flagged", 0) or 0)
+        findings = int(meta.get("critic_findings", 0) or 0)
+        lines.append(
+            f"- **`{clip_id}` is a consensus pseudo-reference, not ground truth.** It was "
+            f"adjudicated from {len(meta.get('engines', []))} engine transcripts ({engines}) "
+            "by an LLM that cannot hear the audio. It works at the text level with Serbian "
+            "language knowledge, which catches a reading that is not Serbian and is **blind "
+            "to any error every engine made the same way**. So the WER column below ranks "
+            "these engines against each other; it does not measure how much of the speech "
+            f"each one got right. {spans} span(s) are flagged as uncertain and {findings} "
+            "more are disputed by the adversarial reviewer: "
+            f"`{meta.get('review_queue', 'benchmarks/references/review-queue.md')}` lists "
+            "them with timestamps, for the human pass that would make this reference real."
+        )
+    return lines
 
 
 def _leaderboard(payload: dict[str, Any], any_reference: bool) -> list[str]:

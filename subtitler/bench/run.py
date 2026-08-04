@@ -267,7 +267,14 @@ def reference_meta(clip_id: str, references: Path) -> dict[str, Any]:
         }
 
     text = path.read_text(encoding="utf-8")
+    # Everything the meta already said is carried forward, and only the five fields that are
+    # derivable from the file itself are recomputed. `bench.agents` writes provenance here
+    # that this module has no way to re-derive (which engine cells voted, how many spans a
+    # human still owes an answer to, what the critic said), and the report reads it: a
+    # rescore that dropped those keys would quietly turn an adjudicated reference back into
+    # an anonymous one.
     return {
+        **existing,
         "clip": clip_id,
         "reference": path.name,
         "status": "present",

@@ -52,7 +52,7 @@ primary target**, Linux is the development platform.
 | `subtitler/edits.py` | hand corrections from the GUI editor: the artifact, and the `edit` stage |
 | `subtitler/doctor.py` | dependency detection and install |
 | `subtitler/gui/` | the browser UI: `forms` (pure), `files`, `jobs`, `app`, `server` |
-| `subtitler/bench/` | benchmark matrix, Serbian normalization, metrics, report |
+| `subtitler/bench/` | benchmark matrix, Serbian normalization, metrics, report, reference adjudication |
 
 ## Gotchas that cost time before
 
@@ -136,5 +136,15 @@ primary target**, Linux is the development platform.
   `random.choice` per attempt and gave up on the first non-retryable error, so one restricted
   key out of two failed a different random half of the benchmark's cloud cells on every run.
   Shuffle once, then give each key a turn.
+- **`benchmarks/references/` is a consensus pseudo-reference, and the WER table inherits its
+  shape.** It was adjudicated by an LLM from the transcripts of the very engines it scores,
+  so an engine that sits in the middle of that consensus is measured partly against its own
+  output, and an error every engine made identically is invisible to it and to any number
+  derived from it. `bench.agents` writes that caveat into each `meta.json`, `report.py`
+  prints it above the leaderboard, and every WER carries `*` while `human_verified` is false.
+  Do not quote a number from that table without the qualifier, and do not raise
+  `human_verified` without working through `benchmarks/references/review-queue.md` with the
+  audio. `--fix` cells and prompt-echoing cells never vote in an adjudication, for the same
+  reason: the first would make the reference agree with the correction pass under test.
 - `<b>` and `<i>` are markup, not width. `cues.display_len` is what `lint` measures, so
   `--fix-markup html` does not report violations on lines that read fine.
