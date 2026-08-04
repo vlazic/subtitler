@@ -72,9 +72,11 @@ class FakeBurner:
 
     def __init__(self):
         self.calls = 0
+        self.last: dict = {}
 
     def __call__(self, cues, dst: Path, **kwargs) -> Path:
         self.calls += 1
+        self.last = kwargs
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(b"fake mp4 " + str(len(cues)).encode())
         return dst
@@ -395,3 +397,223 @@ class TestFixStage:
         monkeypatch.delitem(sys.modules, "litellm", raising=False)
         run_pipeline(cfg(tmp_path), log=lambda _m: None)
         assert "litellm" not in sys.modules
+
+
+class TestTrimStage:
+    """`--start`/`--end`, and the two things about them that are easy to get wrong."""
+
+    def test_the_recognizer_is_given_the_fragment_not_the_whole_file(self, tmp_path, fakes):
+        """Trimming before extraction is what makes cue timestamps relative for free.
+
+        The extracted WAV is three seconds long, so every timestamp the engine produces is
+        measured from the start of the fragment and nothing downstream has to subtract
+        anything. Extracting first and cutting later would leave every cue offset by the
+        start time, and nothing in the output would say so.
+        """
+        run_pipeline(cfg(tmp_path, start="2", end="5"), log=lambda _m: None)
+        work = tmp_path / ".subtitler" / "tiny-10s"
+        assert _duration(work / "trim.wav") == pytest.approx(3.0, abs=0.3)
+        assert _duration(work / "extract.wav") == pytest.approx(3.0, abs=0.3)
+
+    def test_the_burn_gets_the_trimmed_media(self, tmp_path, fakes):
+        """Otherwise the exported video is the full-length source carrying subtitles that
+        match three seconds of it."""
+        _, burner = fakes
+        run_pipeline(cfg(tmp_path, start="2", end="5"), log=lambda _m: None)
+        used = burner.last.get("video") or burner.last.get("audio")
+        assert used == tmp_path / ".subtitler" / "tiny-10s" / "trim.wav"
+        assert burner.last["duration"] == pytest.approx(3.0, abs=0.3)
+
+    def test_trim_is_its_own_cached_stage(self, tmp_path, fakes):
+        result = run_pipeline(cfg(tmp_path, start="2", end="5"), log=lambda _m: None)
+        work = tmp_path / ".subtitler" / "tiny-10s"
+        assert (work / "trim.meta.json").exists()
+        assert "trim" not in result.cached
+
+        again = run_pipeline(cfg(tmp_path, start="2", end="5"), log=lambda _m: None)
+        assert "trim" in again.cached
+
+    def test_no_window_means_no_trim_artifact(self, tmp_path, fakes):
+        """The untrimmed path must be exactly what it was before this stage existed, keys
+        included, or every cached run in the world misses once for nothing."""
+        run_pipeline(cfg(tmp_path), log=lambda _m: None)
+        work = tmp_path / ".subtitler" / "tiny-10s"
+        assert not (work / "trim.wav").exists()
+        assert not (work / "trim.meta.json").exists()
+
+    def test_moving_the_window_retranscribes(self, tmp_path, fakes):
+        engine, _ = fakes
+        run_pipeline(cfg(tmp_path, start="2", end="5"), log=lambda _m: None)
+        run_pipeline(cfg(tmp_path, start="3", end="6"), log=lambda _m: None)
+        assert engine.calls == 2
+
+    def test_an_end_before_the_start_is_rejected_before_any_work(self, tmp_path, fakes):
+        engine, _ = fakes
+        with pytest.raises(pipeline.media.MediaError, match="must be after"):
+            run_pipeline(cfg(tmp_path, start="5", end="2"), log=lambda _m: None)
+        assert engine.calls == 0
+        assert not (tmp_path / ".subtitler").exists()
+
+    def test_a_nonsense_timecode_is_rejected_before_any_work(self, tmp_path, fakes):
+        with pytest.raises(pipeline.media.MediaError, match="HH:MM:SS"):
+            run_pipeline(cfg(tmp_path, start="ten past"), log=lambda _m: None)
+        assert not (tmp_path / ".subtitler").exists()
+
+
+def _duration(path: Path) -> float:
+    return pipeline.media.probe(path).duration
+
+
+class FakeFetcher:
+    """Stands in for yt-dlp. Copies the fixture in rather than downloading one.
+
+    CI never touches YouTube: a test that downloads is flaky, rate-limited and slow. What
+    is verified here is the wiring around the download (the key, the shape asked for, where
+    it lands), and the real thing is verified by hand and recorded in the README.
+    """
+
+    def __init__(self):
+        self.calls: list[str] = []
+
+    def __call__(self, url, dst_dir, *, kind="video", progress=None):
+        from subtitler.fetch import Fetched
+
+        self.calls.append(kind)
+        dst_dir = Path(dst_dir)
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        path = dst_dir / "fetch.wav"
+        path.write_bytes(FIXTURE.read_bytes())
+        if progress:
+            progress("fetching: 100%")
+        return Fetched(path=path, url=url, id="vid123", title="Neki Naslov", kind=kind)
+
+
+@pytest.fixture
+def fetcher(monkeypatch):
+    fake = FakeFetcher()
+    monkeypatch.setattr(pipeline.fetch_mod, "fetch", fake)
+    return fake
+
+
+URL = "https://www.youtube.com/watch?v=vid123"
+
+
+class TestFetchStage:
+    def test_a_url_run_names_its_outputs_from_the_title(self, tmp_path, fakes, fetcher):
+        result = run_pipeline(
+            RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lambda _m: None
+        )
+        assert result.srt == tmp_path / "Neki-Naslov.srt"
+        assert result.srt.exists()
+        assert result.to_dict()["source"] == URL
+
+    def test_the_download_lands_in_the_work_directory_not_the_cwd(self, tmp_path, fakes, fetcher):
+        """Non-negotiable 4. A URL has no directory of its own to write beside, which is
+        exactly the case where writing into the CWD is tempting."""
+        run_pipeline(RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lambda _m: None)
+        work = tmp_path / ".subtitler" / pipeline.fetch_mod.work_stem(URL)
+        assert (work / "fetch.wav").exists()
+        assert (work / "fetch.json").exists()
+        assert not (Path.cwd() / "fetch.wav").exists()
+
+    def test_a_url_run_without_an_output_directory_says_so(self, tmp_path, fakes, fetcher):
+        with pytest.raises(pipeline.media.MediaError, match="-o DIR"):
+            run_pipeline(RunConfig(url=URL, engine="fake"), log=lambda _m: None)
+        assert fetcher.calls == []
+
+    def test_a_second_run_does_not_download_again(self, tmp_path, fakes, fetcher):
+        for _ in range(2):
+            run_pipeline(RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lambda _m: None)
+        assert fetcher.calls == ["video"]
+
+    def test_changing_the_window_does_not_download_again(self, tmp_path, fakes, fetcher):
+        """The acceptance criterion for where `fetch` sits in the chain.
+
+        Re-cutting a 400 MB download because the user moved `--start` by ten seconds would
+        make the feature unusable on anything but a fast connection.
+        """
+        run_pipeline(
+            RunConfig(url=URL, out_dir=tmp_path, engine="fake", start="2", end="5"),
+            log=lambda _m: None,
+        )
+        result = run_pipeline(
+            RunConfig(url=URL, out_dir=tmp_path, engine="fake", start="3", end="6"),
+            log=lambda _m: None,
+        )
+        assert fetcher.calls == ["video"]
+        assert "fetch" in result.cached
+        assert "trim" not in result.cached
+
+    def test_srt_only_asks_for_audio(self, tmp_path, fakes, fetcher):
+        """Downloading 1080p to produce a text file spends the user's bandwidth on
+        nothing, and only this run knows that no pixel will ever be looked at."""
+        run_pipeline(
+            RunConfig(url=URL, out_dir=tmp_path, engine="fake", srt_only=True),
+            log=lambda _m: None,
+        )
+        assert fetcher.calls == ["audio"]
+
+    def test_switching_to_a_burn_fetches_the_video(self, tmp_path, fakes, fetcher):
+        """The audio already on disk has no pixels in it, so this miss is correct."""
+        run_pipeline(
+            RunConfig(url=URL, out_dir=tmp_path, engine="fake", srt_only=True),
+            log=lambda _m: None,
+        )
+        run_pipeline(RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lambda _m: None)
+        assert fetcher.calls == ["audio", "video"]
+
+    def test_force_fetch_downloads_again(self, tmp_path, fakes, fetcher):
+        """The escape hatch for the one thing the key cannot see: an upload that changed
+        behind a URL that did not."""
+        run_pipeline(RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lambda _m: None)
+        run_pipeline(
+            RunConfig(url=URL, out_dir=tmp_path, engine="fake", force="fetch"),
+            log=lambda _m: None,
+        )
+        assert fetcher.calls == ["video", "video"]
+
+    def test_a_corrupt_record_downloads_again_instead_of_crashing(self, tmp_path, fakes, fetcher):
+        run_pipeline(RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lambda _m: None)
+        work = tmp_path / ".subtitler" / pipeline.fetch_mod.work_stem(URL)
+        (work / "fetch.json").write_text("{truncated", encoding="utf-8")
+        run_pipeline(RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lambda _m: None)
+        assert fetcher.calls == ["video", "video"]
+
+    def test_a_deleted_download_is_fetched_again(self, tmp_path, fakes, fetcher):
+        """The meta may be valid while the file it describes is gone."""
+        run_pipeline(RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lambda _m: None)
+        work = tmp_path / ".subtitler" / pipeline.fetch_mod.work_stem(URL)
+        (work / "fetch.wav").unlink()
+        run_pipeline(RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lambda _m: None)
+        assert fetcher.calls == ["video", "video"]
+
+    def test_progress_reaches_the_run_log(self, tmp_path, fakes, fetcher):
+        """The GUI streams this log line by line, so the download has to appear in it."""
+        lines: list[str] = []
+        run_pipeline(RunConfig(url=URL, out_dir=tmp_path, engine="fake"), log=lines.append)
+        assert any("fetching: 100%" in line for line in lines)
+
+
+class TestFromSource:
+    """One place decides whether the user typed a path or a URL."""
+
+    def test_a_url_becomes_a_url(self):
+        assert RunConfig.from_source(URL).url == URL
+        assert RunConfig.from_source(URL).input is None
+
+    def test_a_path_becomes_a_path(self):
+        assert RunConfig.from_source("clip.mp4").input == Path("clip.mp4")
+        assert RunConfig.from_source("clip.mp4").url is None
+
+    def test_the_other_options_pass_through(self):
+        assert RunConfig.from_source(URL, start="1:00", srt_only=True).start == "1:00"
+
+    def test_a_file_run_never_imports_yt_dlp(self, tmp_path, fakes, monkeypatch):
+        """yt-dlp lives behind an extra CI does not sync, so a file run must not touch it.
+
+        Same rule as LiteLLM: an optional dependency that a common path imports is not
+        optional, it is a dependency with a broken install line.
+        """
+        monkeypatch.delitem(sys.modules, "yt_dlp", raising=False)
+        run_pipeline(cfg(tmp_path, start="2", end="5"), log=lambda _m: None)
+        assert "yt_dlp" not in sys.modules

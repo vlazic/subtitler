@@ -7,7 +7,9 @@ claims to have written still exists.
 
 The key is a chain, not a flat hash of the command line:
 
-    extract    <- the source file's content id
+    fetch      <- the URL, and nothing else that is knowable offline
+    trim       <- the source file's content id (or fetch's key)
+    extract    <- the source file's content id (or trim's key)
     denoise    <- extract's key
     transcribe <- the audio stage's key (denoise if denoising, else extract)
     cues       <- transcribe's key
@@ -17,6 +19,23 @@ The key is a chain, not a flat hash of the command line:
 Chaining means a change anywhere invalidates exactly the stages downstream of it and
 nothing else. Switching `--style-preset` re-burns without re-transcribing; switching
 `--denoise` re-runs the denoiser without re-extracting audio from a 3 GB video.
+
+`fetch` is the one stage that cannot be content-addressed, because there is nothing to hash
+until it has already happened. Its key is the normalized URL plus which shape was asked for
+(audio for `--srt-only`, video otherwise), and deliberately nothing about the remote file:
+finding out whether the upload changed costs a network round trip, and paying for one on
+every warm run would make a re-run neither free nor offline. The consequence, stated
+plainly: if the uploader replaces the video behind a URL, this cache serves the old
+download until `--force fetch`. That is the same tradeoff `content_id` makes for large
+files, for the same reason.
+
+`trim` sits between the source and the extraction rather than anywhere later, and that
+placement is the feature. Cutting first means the audio the recognizer sees *starts* at the
+fragment, so its cue timestamps come out relative to the fragment with no arithmetic
+anywhere downstream, and the burn re-encodes the fragment rather than the full-length
+source. Keying it on the source's content id plus the two timecodes is also what makes
+changing `--start` re-cut without re-downloading: `fetch` is upstream of it and its own key
+never mentions a timecode.
 
 Splitting `denoise` out of `extract` (they were one ffmpeg invocation before) is what makes
 that last case work, and it is also what makes the Phase 7 engine x denoiser matrix extract
@@ -45,7 +64,16 @@ SCHEMA_VERSION = 1
 
 # The order stages run in. `--force <stage>` invalidates the named stage and everything
 # after it, so this tuple is the definition of "after".
-STAGE_ORDER: tuple[str, ...] = ("extract", "denoise", "transcribe", "cues", "fix", "burn")
+STAGE_ORDER: tuple[str, ...] = (
+    "fetch",
+    "trim",
+    "extract",
+    "denoise",
+    "transcribe",
+    "cues",
+    "fix",
+    "burn",
+)
 
 # 64 bits of key. A collision needs about 2**32 distinct stage inputs in one work
 # directory; the short form is what makes a hand-inspected meta file readable.
@@ -93,6 +121,15 @@ def content_id(path: Path) -> str:
                 handle.seek(offset)
                 digest.update(handle.read(SAMPLE_BYTES))
     return digest.hexdigest()[:KEY_LEN]
+
+
+def text_id(text: str) -> str:
+    """The same shape of id as `content_id`, for an input that is not a file yet.
+
+    A URL is the case this exists for: the `fetch` stage has to be keyed before anything
+    has been downloaded, so it is keyed on what the user typed rather than on bytes.
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:KEY_LEN]
 
 
 def stage_key(name: str, *, input_hash: str, params: Mapping[str, Any]) -> str:

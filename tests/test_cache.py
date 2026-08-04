@@ -21,7 +21,23 @@ from subtitler.cache import (
     content_id,
     invalidated_from,
     stage_key,
+    text_id,
 )
+
+
+class TestTextId:
+    """A URL cannot be content-addressed before it has been downloaded."""
+
+    def test_same_text_same_id(self):
+        assert text_id("https://example.com/a") == text_id("https://example.com/a")
+
+    def test_different_text_different_id(self):
+        assert text_id("https://example.com/a") != text_id("https://example.com/b")
+
+    def test_it_is_the_same_shape_as_a_content_id(self):
+        """Both end up in the `input` field of a stage meta, so a human reading one cannot
+        tell which kind it is and should not have to."""
+        assert len(text_id("x")) == KEY_LEN
 
 
 class TestContentId:
@@ -136,7 +152,26 @@ class TestInvalidatedFrom:
         assert invalidated_from("transcribe") == frozenset({"transcribe", "cues", "fix", "burn"})
 
     def test_the_first_stage_invalidates_everything(self):
-        assert invalidated_from("extract") == frozenset(STAGE_ORDER)
+        assert invalidated_from("fetch") == frozenset(STAGE_ORDER)
+
+    def test_forcing_the_trim_does_not_re_download(self):
+        """The point of putting `fetch` first.
+
+        A user fixing a badly chosen `--start` on a 400 MB download must re-cut, not
+        re-fetch. `--force trim` is the manual version of the same rule the keys enforce.
+        """
+        assert "fetch" not in invalidated_from("trim")
+
+    def test_the_extraction_is_downstream_of_the_cut(self):
+        """Trimming after extraction would give the recognizer the whole file and leave
+        every cue offset by the start time. The order here is what forbids that."""
+        assert STAGE_ORDER.index("trim") < STAGE_ORDER.index("extract")
+        assert STAGE_ORDER.index("fetch") < STAGE_ORDER.index("trim")
+
+    def test_forcing_the_extraction_still_takes_everything_after_it(self):
+        assert invalidated_from("extract") == frozenset(
+            {"extract", "denoise", "transcribe", "cues", "fix", "burn"}
+        )
 
     def test_the_last_stage_invalidates_only_itself(self):
         assert invalidated_from("burn") == frozenset({"burn"})

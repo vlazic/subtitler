@@ -1,7 +1,7 @@
 # subtitler
 
-Give it a video or an audio file. Get back `.srt`, `.vtt`, and a copy of the video with the
-subtitles burned in.
+Give it a video or an audio file, or a URL. Get back `.srt`, `.vtt`, and a copy of the video
+with the subtitles burned in.
 
 Runs locally by default: no API key, nothing uploaded. Tuned for Serbian, but the language
 is a flag, so it works for anything Whisper supports.
@@ -9,6 +9,9 @@ is a flag, so it works for anything Whisper supports.
 ```bash
 subtitler run ~/Videos/govor.mp4
 # -> govor.srt  govor.vtt  govor.subbed.mp4
+
+subtitler run "https://www.youtube.com/watch?v=..." --start 10:00 --end 13:00 -o ~/out
+# -> the three minutes you asked for, subtitled, with cue times starting at 00:00:00
 ```
 
 ## Why this exists
@@ -36,8 +39,20 @@ make install-deps   # only if the doctor reports something missing
 make models         # downloads Whisper large-v3 (about 3 GB, one time)
 ```
 
-`make setup` resolves to `uv sync --extra mlx --extra cloud --extra dev` on macOS and
-`--extra local --extra cloud --extra dev` on Linux, because `mlx-whisper` has no Linux wheels.
+`make setup` resolves to `uv sync --extra mlx --extra cloud --extra fetch --extra dev` on
+macOS and `--extra local --extra cloud --extra fetch --extra dev` on Linux, because
+`mlx-whisper` has no Linux wheels.
+
+Optional extras, none of which a plain local run needs:
+
+| Extra | For | Install |
+|---|---|---|
+| `fetch` | downloading a URL, through yt-dlp | `uv sync --extra fetch` |
+| `fix` | the LLM correction pass | `uv sync --extra fix` |
+| `cuda` | the CUDA 12 libraries CTranslate2 wants | `uv sync --extra cuda` |
+
+Each is imported lazily and each says its own install line if you use the feature without
+it, so nothing here is a prerequisite for anything else.
 
 ## The window, for people who do not use a terminal
 
@@ -98,12 +113,71 @@ subtitler run INPUT.mp4 --fix                 # optional LLM correction pass
 subtitler run INPUT.mp4 --fix --fix-model openai/gpt-4o
 subtitler run INPUT.mp4 --force transcribe    # ignore the cache from a stage onwards
 
+subtitler run URL -o DIR                      # fetch with yt-dlp, then the usual pipeline
+subtitler run URL -o DIR --srt-only           # fetches the audio track only
+subtitler run IN --start 10:00 --end 13:00    # keep a fragment; works on files and URLs
+subtitler fetch URL -o DIR [--audio-only]     # download and stop
+
 subtitler doctor [--install]                  # check and install system dependencies
 subtitler models list | download | path | rm
 subtitler burn VIDEO SUBS -o OUT [--preview]  # re-style without re-transcribing
 subtitler lint SUBS.srt                       # check cue length, duration, reading speed
 subtitler bench run | report                  # engine x denoiser x clip matrix, see below
 ```
+
+## Fetching a URL
+
+Any `http(s)` argument to `run` is a URL, and anything else is a path; there is no flag to
+remember. It goes through [yt-dlp](https://github.com/yt-dlp/yt-dlp), so it is not YouTube
+only, and it lives behind `uv sync --extra fetch` because a run over a local file has no
+business importing it.
+
+```bash
+subtitler run "https://www.youtube.com/watch?v=..." -o ~/subs
+```
+
+- **`-o` is required for a URL.** A file input has a directory of its own to write beside;
+  a URL has none, and this project never writes into the directory you happened to run it
+  from. The download itself goes into `<output>/.subtitler/url-<hash>/`.
+- **`--srt-only` downloads the audio track only.** On the clip in the table below that is
+  3.7 MB instead of 20.3 MB. Otherwise it asks for an mp4 up to 1080p, since the burn
+  re-encodes anyway and 4K would cost minutes for an overlay nobody inspects at that scale.
+- **The outputs are named from the video's title**, slugified, diacritics intact.
+- `subtitler fetch URL -o DIR` downloads and stops, if you would rather keep the file and
+  iterate on it offline.
+
+Failures that you can do something about arrive as a sentence rather than a traceback: a
+private video, a region block, a dead network, an age gate, a rate limit, or a yt-dlp too
+old for a site that changed under it (which names `--upgrade-package yt-dlp`).
+
+**You are responsible for what you point it at.** Downloading and republishing someone
+else's video is a question about copyright and about the site's terms of service, and this
+tool answers neither. It will fetch whatever yt-dlp can reach; whether you have the right
+to do that, and the right to publish what comes out, is yours to know.
+
+## Keeping a fragment
+
+`--start` and `--end` take `SS`, `MM:SS` or `HH:MM:SS` and work on files and URLs alike.
+
+```bash
+subtitler run lecture.mp4 --start 10:00 --end 13:00
+```
+
+Two things this gets right on purpose:
+
+- **The cue timestamps are relative to the fragment.** Keep 10:00 to 13:00 and the first
+  cue reads `00:00:00`, not `00:10:00`. That is not arithmetic applied afterwards: the cut
+  happens before the audio is extracted, so everything downstream simply sees a file that
+  begins where you asked.
+- **The burn uses the fragment**, so the exported video is three minutes long. Burning onto
+  the original would give you the full-length source carrying subtitles that match three
+  minutes of it.
+
+The cut is a stream copy, so it costs about a second rather than a re-encode. The price of
+that is the one every stream copy pays: video can only be cut at a keyframe, so the
+fragment may begin up to one keyframe interval early (1.2 seconds on the clip below). Only
+the boundary is approximate; nothing inside the fragment is misaligned, because the
+transcript is made from the fragment itself.
 
 ## Re-runs are free
 
@@ -121,10 +195,18 @@ The keys chain, so changing one thing re-does only what depends on it:
 | `--denoise afftdn` | denoise, transcribe, cues, burn (the extraction is reused) |
 | `--fix-model` or an edit to the prompt file | the correction pass, then the burn |
 | a different `--model` or device | transcribe onwards |
+| `--start` or `--end` | the cut, then everything after it. **Not the download** |
+| `--srt-only` on a URL that was fetched as video | the download, as audio this time |
 | the input file's bytes | everything |
 
 `--force` ignores the cache: bare `--force` for all of it, or `--force transcribe` for one
 stage and everything after it. Deleting the `.subtitler` directory is always safe.
+
+A download is the one stage that cannot be content-addressed, because there is nothing to
+hash until it has happened. Its key is the URL plus which shape was asked for, and nothing
+about the remote file: checking whether an upload changed would cost a network round trip
+on every warm run, and a warm run is meant to be free and offline. So if the uploader
+replaces the video behind a URL that did not change, `--force fetch` is how you say so.
 
 Large inputs are fingerprinted by sampling (length, plus the first, middle and last
 megabyte) rather than by hashing in full, because reading 3 GB to decide whether to skip
@@ -367,6 +449,24 @@ does batch 32: 6% faster than 16 and 22.5 GB of VRAM against under 16.
 | ubuntu-latest CI | `subtitler gui` | binds, serves the page, refuses an untokened call, reports dependencies, completes a faster-whisper run through the API, headless |
 | macOS 14 Apple Silicon CI | `subtitler gui` | the same, reporting `Darwin arm64 brew:/opt/homebrew` and `Show in Finder`, transcribing on mlx |
 | Any Mac | `subtitler gui` reveal in Finder | not verified on hardware: `open -R` is covered by a test with a faked `Platform`, never by a Mac |
+| Pop!_OS 22.04, RTX 3090 | `run URL --start 1:00 --end 1:45` | 23.3s cold, end to end: 20.3 MB fetched, cut, transcribed, burned. See the note below |
+| Pop!_OS 22.04, RTX 3090 | the same command again | 0.36s, every stage cached, no network |
+| Pop!_OS 22.04, RTX 3090 | the same with `--start 1:10` | 17.6s, `fetch: cached`. Moving the window re-cuts, it does not re-download |
+| Pop!_OS 22.04, RTX 3090 | the same with `--srt-only` | fetched 3.7 MB of audio instead of 20.3 MB of video |
+| Pop!_OS 22.04, ffmpeg 4.4.2 | `run FILE --start 0:20 --end 0:50` | 30.0s of the Serbian fixture, burned output exactly 30.0s |
+| Pop!_OS 22.04, no `--extra fetch` | a URL run | `error: downloading a URL needs yt-dlp. fix: uv sync --extra fetch`, and the whole suite still passes |
+| Pop!_OS 22.04 | yt-dlp failure messages | unavailable, 404, and a dead DNS resolver each produce one sentence, verified against real yt-dlp output |
+
+The URL row above is [What's Up: June 2026 Skywatching Tips from
+NASA](https://www.youtube.com/watch?v=NtiKxO8xIbY), 229 seconds, from NASA JPL's official
+channel, which is US government work and therefore public domain. Keeping 1:00 to 1:45 gave
+a 46.2-second fragment (1.2 seconds of keyframe slop at the head, as documented above), the
+first cue reads `00:00:00,000`, and `ffprobe` puts the burned mp4 at 46.23 seconds, which
+is the fragment and not the 229-second source.
+
+CI never downloads anything. yt-dlp is stubbed in `tests/test_fetch.py` the way LiteLLM is
+in `tests/test_postedit.py`, and the trim is asserted as an argv list. A test that hits
+YouTube is slow, rate-limited and fails for reasons that have nothing to do with this code.
 
 Both CI runners render `ČĆĐŠŽ čćđšž` identically from the bundled font, which is what the
 bundling is for. CI transcribes with `tiny`, which is fast and cheap and produces poor

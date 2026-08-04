@@ -27,6 +27,11 @@ cloud = ["groq>=0.12"]
 # hides the real one: a run with no API key reported a missing package, not a missing key.
 # Pure Python, so non-negotiable 6 still holds.
 fix = ["litellm>=1.50", "tenacity>=8"]
+# Fetching a URL. Pure Python, so non-negotiable 6 holds, and optional because a run over a
+# local file must neither import it nor require it. Sites change their pages constantly, so
+# a yt-dlp older than a few months is the usual reason a download stops working:
+# `uv sync --extra fetch --upgrade-package yt-dlp`.
+fetch = ["yt-dlp>=2025.1.15"]
 # Benchmark-only denoisers, ported from gozba2/py/test.py. Not a runtime dep:
 # the CLI denoises with ffmpeg filters instead.
 denoise = ["noisereduce>=3.0", "librosa>=0.10", "soundfile>=0.12", "numpy>=1.24"]

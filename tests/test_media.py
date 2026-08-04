@@ -24,6 +24,9 @@ from subtitler.media import (
     denoise_cmd,
     denoise_filter,
     extract_audio_cmd,
+    format_timecode,
+    parse_timecode,
+    trim_cmd,
 )
 
 # The 10-second fixture rather than the 109-second one: `anlmdn` and `speech` are not
@@ -58,6 +61,175 @@ class TestExtractCommand:
         whole source again rather than filtering the WAV that is already on disk.
         """
         assert "-af" not in extract_audio_cmd(Path("in.mp4"), Path("out.wav"))
+
+
+class TestParseTimecode:
+    @pytest.mark.parametrize(
+        ("text", "seconds"),
+        [
+            ("0", 0.0),
+            ("42", 42.0),
+            ("90", 90.0),  # a bare number is seconds and may exceed 59
+            ("1:30", 90.0),
+            ("01:30", 90.0),
+            ("10:00", 600.0),
+            ("1:00:00", 3600.0),
+            ("01:02:03", 3723.0),
+            ("2.5", 2.5),
+            ("0:02.250", 2.25),
+            (" 1:30 ", 90.0),
+        ],
+    )
+    def test_the_three_forms(self, text, seconds):
+        assert parse_timecode(text) == pytest.approx(seconds)
+
+    @pytest.mark.parametrize("text", ["", "abc", "1:2:3:4", "-5", "1:-2", "1:75", "1:2:99"])
+    def test_nonsense_is_refused_with_the_accepted_forms(self, text):
+        with pytest.raises(MediaError):
+            parse_timecode(text)
+
+    def test_a_clock_field_over_59_is_an_error_not_a_silent_reinterpretation(self):
+        """`--start 1:75` is a typo for `1:15` or for `75`, and there is no way to tell.
+
+        Quietly reading it as 135 seconds would cut the wrong fragment and say nothing.
+        """
+        with pytest.raises(MediaError, match="under 60"):
+            parse_timecode("1:75")
+
+    def test_round_trips_through_format(self):
+        assert parse_timecode(format_timecode(3723.5)) == pytest.approx(3723.5)
+
+
+class TestTrimCommand:
+    def test_it_is_a_stream_copy_not_a_re_encode(self):
+        """The regression this exists for: cutting three minutes out of an hour has to
+        take a second, not five minutes, and must not re-compress the source.
+        """
+        cmd = trim_cmd(Path("in.mp4"), Path("out.mp4"), start=600.0, end=780.0)
+        assert cmd[cmd.index("-c") + 1] == "copy"
+        assert "libx264" not in cmd
+        assert "-crf" not in cmd
+
+    def test_the_seek_comes_before_the_input(self):
+        """After `-i` ffmpeg decodes and throws away everything up to the start, which on
+        an hour-long source is the entire cost this is avoiding."""
+        cmd = trim_cmd(Path("in.mp4"), Path("out.mp4"), start=600.0, end=780.0)
+        assert cmd.index("-ss") < cmd.index("-i")
+
+    def test_the_end_becomes_a_duration(self):
+        """`-t`, not `-to`: where `-to` is measured after an input seek is not the same on
+        ffmpeg 4.4 and 8.x, and this project supports both."""
+        cmd = trim_cmd(Path("in.mp4"), Path("out.mp4"), start=600.0, end=780.0)
+        assert "-to" not in cmd
+        assert cmd[cmd.index("-t") + 1] == "180.000"
+
+    def test_timestamps_are_rebased_to_zero(self):
+        """The whole reason the fragment's first cue reads 00:00:00 rather than 00:10:00.
+
+        Without this the copied packets keep the source's timestamps, the extracted WAV
+        starts at 600s, and every cue derived from it is ten minutes out.
+        """
+        cmd = trim_cmd(Path("in.mp4"), Path("out.mp4"), start=600.0)
+        assert cmd[cmd.index("-avoid_negative_ts") + 1] == "make_zero"
+
+    def test_an_open_ended_cut_has_no_duration(self):
+        cmd = trim_cmd(Path("in.mp4"), Path("out.mp4"), start=600.0)
+        assert "-t" not in cmd
+        assert cmd[cmd.index("-ss") + 1] == "600.000"
+
+    def test_a_cut_from_the_beginning_has_no_seek(self):
+        cmd = trim_cmd(Path("in.mp4"), Path("out.mp4"), end=30.0)
+        assert "-ss" not in cmd
+        assert cmd[cmd.index("-t") + 1] == "30.000"
+
+    def test_paths_are_argv_entries_not_a_shell_line(self):
+        cmd = trim_cmd(Path("a b: c.mp4"), Path("out d.mp4"), end=1.0)
+        assert cmd[cmd.index("-i") + 1] == "a b: c.mp4"
+        assert cmd[-1] == "out d.mp4"
+
+    def test_an_end_before_the_start_is_refused(self):
+        with pytest.raises(MediaError, match="must be after"):
+            trim_cmd(Path("in.mp4"), Path("out.mp4"), start=100.0, end=50.0)
+
+    def test_a_no_op_window_is_refused(self):
+        """Copying the whole file to a second name would waste the disk and the time, and
+        the caller has to skip the stage instead. Same rule as `--denoise none`."""
+        with pytest.raises(MediaError, match="nothing to trim"):
+            trim_cmd(Path("in.mp4"), Path("out.mp4"))
+
+
+@pytest.fixture(scope="module")
+def container(tmp_path_factory):
+    """A real mp4, because a raw WAV carries no timestamps at all.
+
+    The property under test is that the fragment's clock is rebased to zero, and a format
+    with no clock cannot show it either way. One keyframe per second so a stream copy can
+    cut where it is asked to.
+    """
+    dst = tmp_path_factory.mktemp("container") / "clip.mp4"
+    media.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-v", "error",
+            "-f", "lavfi", "-i", "color=c=black:s=160x120:r=10:d=10",
+            "-i", str(FIXTURE),
+            "-c:v", "libx264", "-preset", "ultrafast", "-g", "10", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-t", "10", str(dst),
+        ]
+    )  # fmt: skip
+    return dst
+
+
+@needs_ffmpeg
+class TestTrimExecution:
+    """These run ffmpeg. They are the only proof the fragment really starts at zero."""
+
+    def test_the_fragment_has_the_requested_duration(self, container, tmp_path):
+        dst = tmp_path / "cut.mp4"
+        media.trim(container, dst, start=2.0, end=5.0)
+        assert _probe(dst, "format=duration") == pytest.approx(3.0, abs=0.3)
+
+    def test_the_fragment_starts_at_zero_not_at_the_cut_point(self, container, tmp_path):
+        """The acceptance criterion for relative timestamps.
+
+        Everything downstream reads this file and nothing knows about the window, so if
+        its clock still said 2.0 here, every cue in the SRT would be two seconds late.
+        """
+        dst = tmp_path / "cut.mp4"
+        media.trim(container, dst, start=2.0, end=5.0)
+        assert _probe(dst, "format=start_time") == pytest.approx(0.0, abs=0.05)
+
+    def test_the_audio_the_recognizer_gets_is_the_fragment(self, container, tmp_path):
+        """The chain the pipeline actually runs: trim, then extract.
+
+        Extracting from the fragment is what makes the timestamps relative for free. If
+        this ever became "extract, then trim", the WAV would be the full ten seconds.
+        """
+        cut = tmp_path / "cut.mp4"
+        media.trim(container, cut, start=2.0, end=5.0)
+        wav = media.extract_audio(cut, tmp_path / "extract.wav")
+        assert _probe(wav, "format=duration") == pytest.approx(3.0, abs=0.3)
+
+    def test_an_open_ended_cut_runs_to_the_end(self, container, tmp_path):
+        whole = _probe(container, "format=duration")
+        dst = tmp_path / "tail.mp4"
+        media.trim(container, dst, start=4.0)
+        assert _probe(dst, "format=duration") == pytest.approx(whole - 4.0, abs=0.3)
+
+    def test_the_video_stream_survives_the_copy(self, container, tmp_path):
+        """The burn happens after the trim, so the fragment has to still have pixels."""
+        dst = tmp_path / "cut.mp4"
+        media.trim(container, dst, start=2.0, end=5.0)
+        assert media.probe(dst).has_video
+
+
+def _probe(path: Path, entry: str) -> float:
+    proc = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", entry, "-of", "default=nw=1:nk=1", str(path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return float(proc.stdout.strip().splitlines()[0])
 
 
 class TestDenoiseFilter:

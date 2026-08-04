@@ -25,11 +25,11 @@ else
 endif
 
 setup-mac:
-	uv sync --extra mlx --extra cloud --extra dev
+	uv sync --extra mlx --extra cloud --extra fetch --extra dev
 	uv run subtitler doctor
 
 setup-linux:
-	uv sync --extra local --extra cloud --extra dev
+	uv sync --extra local --extra cloud --extra fetch --extra dev
 	uv run subtitler doctor
 
 install-deps:

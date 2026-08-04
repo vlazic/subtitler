@@ -1,6 +1,7 @@
 """Stage orchestration.
 
-    probe -> extract -> [denoise] -> transcribe -> cues -> [fix] -> render -> [burn]
+    [fetch] -> [trim] -> probe -> extract -> [denoise] -> transcribe -> cues -> [fix]
+            -> render -> [burn]
 
 Every stage is a pure-ish function elsewhere; this module only sequences them and owns the
 work directory.
@@ -25,6 +26,7 @@ from typing import Any
 
 from subtitler import burn as burn_mod
 from subtitler import cache as cache_mod
+from subtitler import fetch as fetch_mod
 from subtitler import media, postedit, render
 from subtitler.cues import CueConfig, lint_cues, segments_to_cues
 from subtitler.engines import resolve
@@ -45,7 +47,14 @@ DEFAULT_CANVAS = (1280, 720)
 
 @dataclass(frozen=True, slots=True)
 class RunConfig:
-    input: Path
+    # Exactly one of these two says where the media comes from. `from_source` picks.
+    input: Path | None = None
+    url: str | None = None
+    # The fragment to keep, as the user typed it: `SS`, `MM:SS` or `HH:MM:SS`. Kept as text
+    # rather than seconds for the same reason `canvas` is, so that one parser with one error
+    # message serves the CLI, the GUI and anything else that builds a config.
+    start: str | None = None
+    end: str | None = None
     out_dir: Path | None = None
     engine: str = "auto"
     model: str = "large-v3"
@@ -72,10 +81,27 @@ class RunConfig:
     dry_run: bool = False
     verbose: int = 0
 
+    @classmethod
+    def from_source(cls, source: str | Path, **kwargs: Any) -> RunConfig:
+        """Build a config from whatever the user typed.
+
+        Anything starting with http:// or https:// is a URL and goes to `url`; everything
+        else is a path. This is the one place that decision is made, so the CLI, the GUI and
+        any script agree on it rather than each writing their own sniffing.
+        """
+        if fetch_mod.is_url(source):
+            return cls(url=str(source).strip(), **kwargs)
+        return cls(input=Path(source), **kwargs)
+
+    @property
+    def source(self) -> str:
+        return self.url or str(self.input or "")
+
 
 @dataclass(slots=True)
 class RunResult:
     input: Path
+    source: str = ""
     srt: Path | None = None
     vtt: Path | None = None
     video: Path | None = None
@@ -90,6 +116,8 @@ class RunResult:
     def to_dict(self) -> dict[str, Any]:
         return {
             "input": str(self.input),
+            # What the user asked for, which is not the same file for a URL or a trim run.
+            "source": self.source or str(self.input),
             "srt": str(self.srt) if self.srt else None,
             "vtt": str(self.vtt) if self.vtt else None,
             "video": str(self.video) if self.video else None,
@@ -113,19 +141,55 @@ def parse_canvas(spec: str) -> tuple[int, int]:
     return burn_mod.even(width), burn_mod.even(height)
 
 
+def trim_window(cfg: RunConfig) -> tuple[float, float | None]:
+    """`--start`/`--end` as seconds. Public so a form layer can validate before running."""
+    start = media.parse_timecode(cfg.start) if cfg.start else 0.0
+    end = media.parse_timecode(cfg.end) if cfg.end else None
+    if end is not None and end <= start:
+        raise media.MediaError(
+            f"--end ({media.format_timecode(end)}) must be after "
+            f"--start ({media.format_timecode(start)})"
+        )
+    return start, end
+
+
+def wants_video(cfg: RunConfig) -> bool:
+    """Whether this run will produce a picture, and so whether it needs one.
+
+    The only consumer of a video stream is the burn. A `--srt-only` or `--no-burn` run that
+    downloaded 1080p would spend the user's bandwidth to produce a text file.
+    """
+    return cfg.burn and not cfg.srt_only
+
+
 def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
     started = time.monotonic()
-    src = cfg.input.expanduser().resolve()
-    out_dir = (cfg.out_dir or src.parent).expanduser().resolve()
-    work = out_dir / ".subtitler" / src.stem
-    stem = src.stem
 
-    # Before any work: a typo in --force must be rejected on the spot, not after ffprobe
-    # has already run and printed a line that implies the run started successfully.
+    # Before any work: a typo in --force or in --start must be rejected on the spot, not
+    # after ffprobe has printed a line implying the run started, and certainly not after a
+    # 200 MB download.
     forced = cache_mod.invalidated_from(cfg.force)
+    start_s, end_s = trim_window(cfg)
 
-    info = media.probe(src, dry_run=cfg.dry_run)
-    log(f"input: {src.name} ({info.duration:.1f}s, {'video' if info.has_video else 'audio only'})")
+    if cfg.url:
+        if cfg.out_dir is None:
+            # Non-negotiable 4. A file input has a directory of its own to write beside;
+            # a URL has none, and defaulting to the CWD is exactly what that rule forbids.
+            raise media.MediaError(
+                "a URL run needs an output directory: pass -o DIR. "
+                "Nothing is ever written into the current directory."
+            )
+        out_dir = cfg.out_dir.expanduser().resolve()
+        # Named from the URL, not from the video's title: the directory has to exist before
+        # anything is downloaded, and learning the title costs a network round trip that a
+        # warm run must not pay.
+        work = out_dir / ".subtitler" / fetch_mod.work_stem(cfg.url)
+    elif cfg.input is not None:
+        src_in = cfg.input.expanduser().resolve()
+        out_dir = (cfg.out_dir or src_in.parent).expanduser().resolve()
+        work = out_dir / ".subtitler" / src_in.stem
+    else:
+        raise media.MediaError("nothing to transcribe: pass a file or a URL")
 
     cache = cache_mod.StageCache(
         work,
@@ -134,9 +198,27 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
         # cache (it would report stages as done that it never did) nor write to it.
         enabled=not cfg.dry_run,
     )
-    source_id = cache_mod.content_id(src) if cache.enabled else "dry-run"
 
-    audio_wav, audio_key = _audio(cfg, cache, src, source_id, work, log)
+    if cfg.url:
+        src, media_id, stem, label = _fetch(cfg, cache, work, log)
+    else:
+        src = cfg.input.expanduser().resolve()  # type: ignore[union-attr]
+        media_id = cache_mod.content_id(src) if cache.enabled else "dry-run"
+        stem, label = src.stem, src.name
+
+    if start_s or end_s is not None:
+        src, media_id = _trim(cfg, cache, src, media_id, work, start_s, end_s, log)
+        label = f"{label} [{media.format_timecode(start_s)} to " + (
+            f"{media.format_timecode(end_s)}]" if end_s is not None else "the end]"
+        )
+
+    # Probed after the trim, never before: the burn's `-t` and the canvas length have to be
+    # the fragment's real duration, and a stream copy lands on a keyframe, so `end - start`
+    # is arithmetic rather than fact.
+    info = media.probe(src, dry_run=cfg.dry_run)
+    log(f"input: {label} ({info.duration:.1f}s, {'video' if info.has_video else 'audio only'})")
+
+    audio_wav, audio_key = _audio(cfg, cache, src, media_id, work, log)
 
     engine = resolve(cfg.engine, model=cfg.model, device=cfg.device, batch_size=cfg.batch_size)
     described = engine.describe()
@@ -157,7 +239,12 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
 
     if cfg.dry_run:
         log("dry run: stopping before transcription")
-        return RunResult(input=src, engine=engine.name, elapsed_s=time.monotonic() - started)
+        return RunResult(
+            input=src,
+            source=cfg.source,
+            engine=engine.name,
+            elapsed_s=time.monotonic() - started,
+        )
 
     transcript, transcribe_key = _transcribe(cfg, cache, engine, opts, audio_wav, audio_key, log)
     cues, cues_key = _cues(cfg, cache, transcript, transcribe_key, log)
@@ -176,6 +263,7 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
 
     result = RunResult(
         input=src,
+        source=cfg.source,
         srt=srt_path,
         vtt=vtt_path,
         transcript=transcript,
@@ -185,9 +273,12 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
         fix=fix_report,
     )
 
-    if cfg.burn and not cfg.srt_only:
+    if wants_video(cfg):
+        # `src` here is the trimmed fragment when one was asked for, which is the point:
+        # burning onto the original would export a full-length video carrying subtitles
+        # that match three minutes of it.
         result.video = _burn(
-            cfg, cache, src, source_id, info, cues, cues_key, out_dir / f"{stem}.subbed.mp4", log
+            cfg, cache, src, media_id, info, cues, cues_key, out_dir / f"{stem}.subbed.mp4", log
         )
 
     result.cached = tuple(cache.hits)
@@ -200,19 +291,116 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
 # --------------------------------------------------------------------------------------
 
 
+def _fetch(
+    cfg: RunConfig,
+    cache: cache_mod.StageCache,
+    work: Path,
+    log: Any,
+) -> tuple[Path, str, str, str]:
+    """Download the URL into the work directory. Returns (media, key, stem, label).
+
+    The stage's key is the URL plus which shape was asked for, and nothing else: there is
+    nothing to content-address before the download has happened, and asking the site
+    whether the upload changed would put a network round trip on every warm run. So
+    changing `--start`, the engine or the style re-uses the download, and `--force fetch`
+    is how you say "the upstream video changed".
+
+    The downloaded file's extension is not fixed in advance (it is whatever the site
+    serves), so the cached record `fetch.json` is consulted first and names the artifact
+    the cache then checks for. An unreadable record is removed rather than trusted, which
+    turns it into a plain "missing artifact" miss.
+    """
+    assert cfg.url is not None
+    kind = "video" if wants_video(cfg) else "audio"
+    info_path = work / fetch_mod.INFO_NAME
+
+    if cfg.dry_run:
+        # Nothing is downloaded, and nothing may be read from the cache, so the rest of the
+        # dry run works from the name the download would have had.
+        log(f"dry run: would fetch {cfg.url} ({kind})")
+        nominal = work / f"{fetch_mod.DOWNLOAD_STEM}.mp4"
+        return nominal, "dry-run", fetch_mod.work_stem(cfg.url), cfg.url
+
+    known = fetch_mod.read_info(info_path)
+    if known is None and info_path.exists():
+        info_path.unlink()
+
+    entry = cache.begin(
+        "fetch",
+        input_hash=fetch_mod.url_id(cfg.url),
+        params=fetch_mod.cache_params(kind),
+        artifacts=(info_path, known.path) if known else (info_path,),
+    )
+    if entry.hit and known is not None:
+        log(f"fetch: cached ({known.path.name}, {known.title or known.id})")
+        return known.path, entry.key, known.stem, known.title or known.path.name
+
+    log(f"fetching {cfg.url} ({kind})")
+    fetched = fetch_mod.fetch(cfg.url, work, kind=kind, progress=log)
+    fetch_mod.write_info(info_path, fetched)
+    cache.commit(entry)
+    log(f"fetched: {fetched.title or fetched.id} -> {fetched.path.name}")
+    return fetched.path, entry.key, fetched.stem, fetched.title or fetched.path.name
+
+
+def _trim(
+    cfg: RunConfig,
+    cache: cache_mod.StageCache,
+    src: Path,
+    media_id: str,
+    work: Path,
+    start: float,
+    end: float | None,
+    log: Any,
+) -> tuple[Path, str]:
+    """Cut the fragment out before anything else looks at the media.
+
+    Position is the design. Trimming here means the extraction, the transcript, the cues
+    and the burn all see a file that *begins* at the fragment, so cue timestamps come out
+    relative to it with no offset arithmetic anywhere, and the burn re-encodes three
+    minutes rather than an hour. Doing it at the end would need every one of those to know
+    about a window, and the first thing to get it wrong would be silent.
+    """
+    dst = work / f"trim{src.suffix or '.mp4'}"
+    window = f"{media.format_timecode(start)} to " + (
+        media.format_timecode(end) if end is not None else "the end"
+    )
+    entry = cache.begin(
+        "trim",
+        input_hash=media_id,
+        # The two timecodes and nothing else: the cut is a stream copy, so no codec,
+        # quality or size setting can change what comes out.
+        params={"start": round(start, 3), "end": round(end, 3) if end is not None else None},
+        artifacts=(dst,),
+    )
+    if entry.hit:
+        log(f"trim: cached ({window})")
+        return dst, entry.key
+
+    media.trim(src, dst, start=start, end=end, dry_run=cfg.dry_run)
+    cache.commit(entry)
+    log(f"trimmed: {window} (stream copy)")
+    return dst, entry.key
+
+
 def _audio(
     cfg: RunConfig,
     cache: cache_mod.StageCache,
     src: Path,
-    source_id: str,
+    media_id: str,
     work: Path,
     log: Any,
 ) -> tuple[Path, str]:
-    """extract, then optionally denoise. Returns the WAV the recognizer should read."""
+    """extract, then optionally denoise. Returns the WAV the recognizer should read.
+
+    `media_id` is the id of the media actually being transcribed: the source file's content
+    id normally, and the `trim` stage's key when a fragment was cut, so that changing the
+    window re-extracts from the new fragment rather than serving the old one's audio.
+    """
     extract_wav = work / "extract.wav"
     entry = cache.begin(
         "extract",
-        input_hash=source_id,
+        input_hash=media_id,
         params={"sample_rate": media.TARGET_SR, "channels": media.TARGET_CHANNELS},
         artifacts=(extract_wav,),
     )
@@ -347,7 +535,7 @@ def _burn(
     cfg: RunConfig,
     cache: cache_mod.StageCache,
     src: Path,
-    source_id: str,
+    media_id: str,
     info: media.MediaInfo,
     cues: tuple[Cue, ...],
     cues_key: str,
@@ -372,7 +560,9 @@ def _burn(
         "burn",
         input_hash=cues_key,
         params={
-            "source": source_id,
+            # The media that supplies the pixels and the audio: the trimmed fragment when
+            # there is one, so a re-cut re-burns.
+            "source": media_id,
             "style_preset": cfg.style_preset,
             "font": cfg.font,
             "font_size": cfg.font_size,

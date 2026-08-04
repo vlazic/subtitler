@@ -148,6 +148,86 @@ def denoise_cmd(
     ]
 
 
+def trim_cmd(src: Path, dst: Path, *, start: float = 0.0, end: float | None = None) -> list[str]:
+    """Cut a fragment out of a source without re-encoding it.
+
+    `-c copy` is the whole point. Re-encoding an hour to keep three minutes costs minutes
+    of CPU for a result that is bit-for-bit worse than the source; a stream copy is one
+    demux pass and finishes in about a second.
+
+    Three deliberate choices:
+
+    * **`-ss` goes before `-i`.** After `-i` it decodes and discards everything up to the
+      start, which on an hour-long source is the whole cost we are avoiding. Before `-i`
+      it is a demuxer seek.
+    * **`-t` (a duration), not `-to`.** Where `-to` is measured when the input was seeked
+      is not the same on ffmpeg 4.4 and 8.x, and this project supports both. A duration
+      means the same thing everywhere, so the end is converted to one here.
+    * **`-avoid_negative_ts make_zero`.** Without it the fragment keeps the source's
+      timestamps, so a cut at 10:00 produces a file whose first packet claims to be at
+      600s, and every cue derived from it would be offset by ten minutes. This is what
+      makes "the first cue starts near 00:00:00" true rather than hoped for.
+
+    The cost of a stream copy, stated plainly: video can only be cut at a keyframe, so the
+    fragment may begin up to one keyframe interval (a few seconds on a typical YouTube
+    mp4) before the requested start. Nothing downstream is misaligned by that, because the
+    transcript is made from this file and not from the original; only the boundary is
+    approximate. The pipeline re-probes the result rather than trusting `end - start`.
+    """
+    if start < 0:
+        raise MediaError(f"start must not be negative, got {start}")
+    if end is not None and end <= start:
+        raise MediaError(
+            f"end ({format_timecode(end)}) must be after start ({format_timecode(start)})"
+        )
+    if not start and end is None:
+        raise MediaError("neither a start nor an end was given; there is nothing to trim")
+
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-v", "error"]
+    if start:
+        cmd += ["-ss", f"{start:.3f}"]
+    cmd += ["-i", str(src)]
+    if end is not None:
+        cmd += ["-t", f"{end - start:.3f}"]
+    # -sn/-dn: a copied subtitle or data stream is the one thing that can make an
+    # otherwise fine stream copy fail on a container change, and neither is transcribed.
+    cmd += ["-c", "copy", "-avoid_negative_ts", "make_zero", "-sn", "-dn", str(dst)]
+    return cmd
+
+
+def parse_timecode(value: str) -> float:
+    """`SS`, `MM:SS` or `HH:MM:SS`, with optional fractional seconds, to seconds.
+
+    A bare number is seconds and may exceed 59, because `--start 90` is a thing people
+    type. Once a colon appears the fields below the first are clock fields and are bounded,
+    so `1:75` is rejected rather than quietly read as 135 seconds.
+    """
+    text = (value or "").strip()
+    if not text:
+        raise MediaError("empty timecode; expected SS, MM:SS or HH:MM:SS")
+    parts = text.split(":")
+    if len(parts) > 3:
+        raise MediaError(f"invalid timecode {value!r}; expected SS, MM:SS or HH:MM:SS")
+    try:
+        numbers = [float(part) for part in parts]
+    except ValueError as exc:
+        raise MediaError(f"invalid timecode {value!r}; expected SS, MM:SS or HH:MM:SS") from exc
+    if any(number < 0 for number in numbers):
+        raise MediaError(f"invalid timecode {value!r}; time does not run backwards")
+    if len(parts) > 1 and any(number >= 60 for number in numbers[1:]):
+        raise MediaError(f"invalid timecode {value!r}; minutes and seconds must be under 60")
+    seconds = 0.0
+    for number in numbers:
+        seconds = seconds * 60 + number
+    return seconds
+
+
+def format_timecode(seconds: float) -> str:
+    """The inverse, for log lines and error messages. Always HH:MM:SS.mmm."""
+    whole = int(seconds)
+    return f"{whole // 3600:02d}:{whole % 3600 // 60:02d}:{whole % 60:02d}.{round((seconds - whole) * 1000):03d}"
+
+
 def denoise_filter(name: str, rnnoise_model: Path | None = None) -> str:
     """Resolve a denoise preset name to an ffmpeg filter string."""
     if name not in DENOISE_FILTERS:
@@ -252,6 +332,20 @@ def _parse_fps(rate: str | None) -> float | None:
 def extract_audio(src: Path, dst: Path, *, dry_run: bool = False) -> Path:
     dst.parent.mkdir(parents=True, exist_ok=True)
     run(extract_audio_cmd(src, dst), dry_run=dry_run)
+    return dst
+
+
+def trim(
+    src: Path,
+    dst: Path,
+    *,
+    start: float = 0.0,
+    end: float | None = None,
+    dry_run: bool = False,
+) -> Path:
+    """Stream-copy the fragment between `start` and `end` into `dst`. See `trim_cmd`."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    run(trim_cmd(src, dst, start=start, end=end), dry_run=dry_run)
     return dst
 
 

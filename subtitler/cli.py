@@ -49,9 +49,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    p_run = sub.add_parser("run", help="transcribe a file and write subtitles")
-    p_run.add_argument("input", help="audio or video file")
-    p_run.add_argument("-o", "--out", help="output directory (default: alongside the input)")
+    p_run = sub.add_parser("run", help="transcribe a file or a URL and write subtitles")
+    p_run.add_argument(
+        "input",
+        help=(
+            "audio or video file, or an http(s) URL to fetch with yt-dlp "
+            "(needs `uv sync --extra fetch`)"
+        ),
+    )
+    p_run.add_argument(
+        "-o",
+        "--out",
+        help="output directory (default: alongside the input; required for a URL)",
+    )
+    p_run.add_argument(
+        "--start",
+        metavar="TIME",
+        help="keep only from this point on: SS, MM:SS or HH:MM:SS. Cue times start at zero",
+    )
+    p_run.add_argument(
+        "--end",
+        metavar="TIME",
+        help="keep only up to this point, same formats as --start",
+    )
     p_run.add_argument(
         "--engine",
         default="auto",
@@ -142,7 +162,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="STAGE",
         help=(
             "invalidate the stage cache from a stage onwards "
-            "(extract, denoise, transcribe, cues, fix, burn); bare --force means all"
+            "(fetch, trim, extract, denoise, transcribe, cues, fix, burn); "
+            "bare --force means all"
         ),
     )
     p_run.add_argument("--dry-run", action="store_true", help="print commands, execute nothing")
@@ -159,6 +180,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-browser",
         action="store_true",
         help="print the address instead of opening a browser",
+    )
+
+    # `run URL` covers the common case on its own, so this exists for the other one:
+    # keeping the media. Downloading once and then iterating locally with `run` costs the
+    # site nothing and works offline, and it is also how you look at what actually came
+    # down before spending an hour of GPU on it.
+    p_fetch = sub.add_parser("fetch", help="download a URL with yt-dlp, without transcribing")
+    p_fetch.add_argument("url")
+    p_fetch.add_argument("-o", "--out", required=True, help="output directory")
+    p_fetch.add_argument(
+        "--audio-only",
+        action="store_true",
+        help="fetch just the audio track, which is all a transcript needs",
     )
 
     p_doctor = sub.add_parser("doctor", help="check and install system dependencies")
@@ -270,8 +304,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
     elif args.drop_intro_phrases:
         print("--drop-intro-phrases has no effect without --fix", file=sys.stderr)
 
-    cfg = RunConfig(
-        input=Path(args.input),
+    cfg = RunConfig.from_source(
+        args.input,
+        start=args.start,
+        end=args.end,
         out_dir=Path(args.out) if args.out else None,
         engine=args.engine,
         model=args.model,
@@ -310,6 +346,29 @@ def _cmd_run(args: argparse.Namespace) -> int:
     result = run_pipeline(cfg, log=log)
     if args.json:
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_fetch(args: argparse.Namespace) -> int:
+    from subtitler import fetch as fetch_mod
+
+    if not fetch_mod.is_url(args.url):
+        print(f"not an http(s) URL: {args.url}", file=sys.stderr)
+        return 2
+
+    out = Path(args.out).expanduser().resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    kind = "audio" if args.audio_only else "video"
+    got = fetch_mod.fetch(
+        args.url, out, kind=kind, progress=lambda message: print(message, file=sys.stderr)
+    )
+
+    # yt-dlp writes to a fixed stem so the pipeline's cache can name the artifact. A file
+    # the user keeps deserves the video's own name instead.
+    named = out / f"{got.stem}{got.path.suffix}"
+    if named != got.path:
+        got.path.replace(named)
+    print(named)
     return 0
 
 
@@ -585,6 +644,7 @@ def _cmd_bench(args: argparse.Namespace) -> int:
 
 _HANDLERS = {
     "run": _cmd_run,
+    "fetch": _cmd_fetch,
     "bench": _cmd_bench,
     "gui": _cmd_gui,
     "doctor": _cmd_doctor,
