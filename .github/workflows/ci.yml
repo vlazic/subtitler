@@ -46,9 +46,14 @@ jobs:
         #    Untapping is what the warning itself recommends.
         env:
           HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
+        # 3. Homebrew has split the formula. The regular `ffmpeg` bottle is built WITHOUT
+        #    libass; `ffmpeg-full` is the one that carries it. This is the single most
+        #    important macOS setup fact for this project, because burn-in is the whole
+        #    point and `brew install ffmpeg` is what everyone types.
         run: |
           brew untap aws/tap 2>/dev/null || true
-          brew reinstall --formula ffmpeg
+          brew install ffmpeg-full || brew install ffmpeg
+          brew link --overwrite --force ffmpeg-full 2>/dev/null || true
           echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
 
       - name: Record the ffmpeg build

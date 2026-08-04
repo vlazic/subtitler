@@ -60,10 +60,12 @@ primary target**, Linux is the development platform.
   When a filter is missing and you pass a positional argument, ffmpeg reports
   `No option name near '...'` instead of `No such filter: 'ass'`, because option parsing
   fails before the name is resolved. That misleading error cost real time once already.
-- **Do not trust that a Homebrew ffmpeg has libass.** The macOS CI runner's ffmpeg 8.1.2
-  does not carry the `ass` filter. `doctor` treats libass as a required dependency for
-  exactly this reason, and CI prints `which -a ffmpeg` plus the configuration line so the
-  build in use is always identifiable.
+- **On macOS the formula is `ffmpeg-full`, not `ffmpeg`.** Homebrew's regular `ffmpeg`
+  bottle is built without libass (verified on the macos-14 runner: the configuration line
+  has `--enable-libx264` and no `--enable-libass`), so burn-in cannot work with it. This
+  is the single most important macOS setup fact in the project, because `brew install
+  ffmpeg` is what everyone types. `doctor` names the right formula; CI installs it and
+  hard-fails if the resulting binary still lacks libass.
 - `-pix_fmt yuv420p` is mandatory on every encode. Without it QuickTime and Safari may
   refuse the file, and the target user is on a Mac.
 - ASS colors are `&HAABBGGRR`, byte order reversed from RGBA. Use `rgba_to_ass()`.

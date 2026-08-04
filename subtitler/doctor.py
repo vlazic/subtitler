@@ -398,9 +398,12 @@ DEPS: tuple[Dep, ...] = (
         required=True,
         why="renders the subtitles into the video",
         check=check_libass,
-        brew="ffmpeg",
+        # Homebrew's regular `ffmpeg` bottle is built WITHOUT libass; `ffmpeg-full` is the
+        # one that has it. `brew install ffmpeg` is what everyone types, and it produces an
+        # ffmpeg that cannot burn in subtitles, so the fix has to name the right formula.
+        brew="ffmpeg-full",
         apt="ffmpeg",
-        manual="reinstall ffmpeg with libass support",
+        manual="install an ffmpeg built with libass",
     ),
     Dep(
         key="encoders",

@@ -22,7 +22,12 @@ than 20 characters per second.
 
 ## Install
 
-Requires [uv](https://docs.astral.sh/uv/) and ffmpeg.
+Requires [uv](https://docs.astral.sh/uv/) and an ffmpeg built with **libass**.
+
+> **macOS:** use `brew install ffmpeg-full`, not `brew install ffmpeg`. Homebrew's
+> regular `ffmpeg` bottle is built without libass, and without libass subtitles
+> cannot be burned into the video at all. `subtitler doctor` checks for this and
+> tells you the right formula.
 
 ```bash
 git clone https://github.com/vlazic/subtitler && cd subtitler
