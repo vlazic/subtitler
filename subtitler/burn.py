@@ -214,11 +214,14 @@ def build_ass(
 # Command builders. Pure functions, asserted on directly in tests.
 # --------------------------------------------------------------------------------------
 
-# Every option is named. The shorthand `ass=subs.ass:fontsdir=fonts` works on ffmpeg 4.4
-# but is rejected outright by the 8.x that Homebrew ships ("No option name near
-# 'subs.ass:fontsdir=fonts'"), because mixing a positional value with named options is no
-# longer allowed. `f` is a documented alias for `filename` on both, so the explicit form is
-# the one that lives in the intersection. Caught by the macOS CI job on its first run.
+# Every option is named, including the filename (`f` is a documented alias for `filename`
+# on 4.4 and 8.x alike).
+#
+# This is not cosmetic. When a filter is MISSING, ffmpeg given a positional argument
+# reports "No option name near 'subs.ass:fontsdir=fonts'" rather than "No such filter:
+# 'ass'", because it fails while parsing options before it ever resolves the name. That
+# error reads like a syntax incompatibility and sends you off fixing the wrong thing. With
+# every option named, a missing filter says so plainly.
 _FILTER = "ass=f=subs.ass:fontsdir=fonts"
 
 

@@ -56,10 +56,14 @@ primary target**, Linux is the development platform.
 - ffmpeg 4.4 (Ubuntu 22.04) vs 7.x/8.x (Homebrew): `-vsync` vs `-fps_mode`, and `-shortest`
   against an infinite `lavfi` source is unreliable on 4.x. Always pass an explicit `d=` and
   `-t` from ffprobe.
-- **Name every filter option.** `ass=subs.ass:fontsdir=fonts` works on 4.4 and is rejected
-  by Homebrew's 8.x with "No option name near ...", because a positional value can no
-  longer be mixed with named options. Use `ass=f=subs.ass:fontsdir=fonts`. This was found
-  by the macOS CI job on its first run, which is the entire argument for having it.
+- **Name every filter option**, including the filename: `ass=f=subs.ass:fontsdir=fonts`.
+  When a filter is missing and you pass a positional argument, ffmpeg reports
+  `No option name near '...'` instead of `No such filter: 'ass'`, because option parsing
+  fails before the name is resolved. That misleading error cost real time once already.
+- **Do not trust that a Homebrew ffmpeg has libass.** The macOS CI runner's ffmpeg 8.1.2
+  does not carry the `ass` filter. `doctor` treats libass as a required dependency for
+  exactly this reason, and CI prints `which -a ffmpeg` plus the configuration line so the
+  build in use is always identifiable.
 - `-pix_fmt yuv420p` is mandatory on every encode. Without it QuickTime and Safari may
   refuse the file, and the target user is on a Mac.
 - ASS colors are `&HAABBGGRR`, byte order reversed from RGBA. Use `rgba_to_ass()`.

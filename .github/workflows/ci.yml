@@ -36,11 +36,22 @@ jobs:
 
       - name: Install ffmpeg (macOS)
         if: runner.os == 'macOS'
-        run: brew install ffmpeg
+        # The runner image ships its own ffmpeg. `brew install` is a no-op if that one
+        # satisfies the formula, so force the Homebrew build and put it first on PATH:
+        # the preinstalled binary has no libass, and burn-in needs it.
+        run: |
+          brew install ffmpeg || brew link --overwrite ffmpeg
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
 
       - name: Record the ffmpeg build
         run: |
+          # Which binary, and what it was built with. A machine can have several ffmpegs
+          # and only one of them carries libass; without this, a capability failure is
+          # unattributable.
+          which -a ffmpeg || true
           ffmpeg -version | head -1
+          ffmpeg -version | tr ' ' '\n' | grep -E '^--enable-(libass|libx264|libfreetype|libfontconfig)$' || \
+            echo "NOTE: none of libass/libx264/freetype/fontconfig in the configuration line"
           # Everything this project needs must exist on both the 4.4 Ubuntu ships and the
           # 8.x Homebrew ships. Ask about each capability individually: the `-filters`
           # table's column layout is not stable across releases, so grepping it produced
