@@ -10,6 +10,7 @@ from __future__ import annotations
 import ctypes
 import os
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -26,40 +27,64 @@ from subtitler.model import Segment, Transcript, Word
 
 BACKEND = "faster-whisper"
 
+# A sane batch size on a 24 GB card, measured rather than guessed. On an RTX 3090 decoding
+# large-v3 in float16, batch 16 peaks at about 10 GB and 32 at about 22.5 GB while being
+# only 6% faster, which leaves no room for a desktop session on the same card.
+DEFAULT_BATCH_SIZE = 16
+
 # None = not attempted yet. Cache the RESULT, not merely the fact that it ran: caching a
 # bare "already done" flag made the second call return True even when nothing loaded,
 # which told the device probe CUDA was fine and produced a failure several seconds later.
 _cuda_preloaded: bool | None = None
 
 
+def _nvidia_lib_dirs(roots: Sequence[str] | None = None) -> list[Path]:
+    """Every `nvidia/*/lib` directory pip put in this environment.
+
+    **`__file__` is None for these packages.** `nvidia`, `nvidia.cublas` and
+    `nvidia.cublas.lib` are all namespace packages with no `__init__.py`, so the import
+    machinery gives them a `__path__` and no `__file__`. The first version of this function
+    read `Path(module.__file__ or "").parent`, which quietly became `Path(".")`, so every
+    candidate library was looked for in the current working directory, none existed, and
+    the preload returned False on a machine where all of them were installed. It never
+    loaded a single library, on any machine, ever. `__path__` is the attribute that exists.
+    """
+    if roots is None:
+        try:
+            nvidia = __import__("nvidia", fromlist=["__path__"])
+        except ImportError:
+            return []
+        roots = list(getattr(nvidia, "__path__", []))
+    return sorted({d for root in roots for d in Path(root).glob("*/lib") if d.is_dir()})
+
+
 def preload_cuda_libraries() -> bool:
     """Load the venv's CUDA 12 libraries before CTranslate2 looks for them.
 
-    CTranslate2 wheels link against CUDA 12 while a current driver ships 13, so the loader
-    finds the system's 13 first and CTranslate2 fails with an unresolved symbol. Opening
-    the pip-installed cu12 libraries with RTLD_GLOBAL first makes them win.
+    CTranslate2 wheels link against CUDA 12. This machine's system toolkit is 11.5, so the
+    loader finds `libcublas.so.11` and nothing that satisfies `libcublas.so.12`, and
+    CTranslate2 dies with "Library libcublas.so.12 is not found or cannot be loaded". The
+    driver is not the problem: 580 supports 12 and 13 alike. Opening the pip-installed cu12
+    libraries with RTLD_GLOBAL registers them under their sonames, so the later `dlopen`
+    from inside CTranslate2 and cuDNN finds the already-loaded 12 instead of searching a
+    system path that only has 11.
 
-    Returns True if anything was loaded. Never raises: on a CPU-only machine there is
-    simply nothing to preload.
+    Everything under `nvidia/*/lib` is loaded rather than a hand-written list of filenames:
+    cuDNN 9 is split into sub-libraries (`libcudnn_graph`, `libcudnn_engines_*`) that
+    `libcudnn.so.9` dlopens by bare soname at runtime, and nvrtc arrives as a cuDNN
+    dependency. Naming them individually means a version bump that renames one silently
+    reverts to CPU.
+
+    Returns True if anything was loaded. Never raises: on a CPU-only machine, and on both
+    CI runners, there is simply nothing to preload.
     """
     global _cuda_preloaded
     if _cuda_preloaded is not None:
         return _cuda_preloaded
 
     loaded = False
-    for package, libs in (
-        ("nvidia.cublas.lib", ("libcublas.so.12", "libcublasLt.so.12")),
-        ("nvidia.cudnn.lib", ("libcudnn.so.9", "libcudnn_ops.so.9", "libcudnn_cnn.so.9")),
-    ):
-        try:
-            module = __import__(package, fromlist=["__file__"])
-            lib_dir = Path(module.__file__ or "").parent
-        except (ImportError, AttributeError):
-            continue
-        for name in libs:
-            candidate = lib_dir / name
-            if not candidate.exists():
-                continue
+    for lib_dir in _nvidia_lib_dirs():
+        for candidate in sorted(lib_dir.glob("*.so.*")):
             try:
                 ctypes.CDLL(str(candidate), mode=ctypes.RTLD_GLOBAL)
                 loaded = True
@@ -72,14 +97,33 @@ def preload_cuda_libraries() -> bool:
     return loaded
 
 
+def _loadable(soname: str) -> bool:
+    try:
+        ctypes.CDLL(soname, mode=ctypes.RTLD_GLOBAL)
+    except OSError:
+        return False
+    return True
+
+
+def cublas12_loadable() -> bool:
+    """Is `libcublas.so.12` actually openable, after the venv preload has had its turn?
+
+    Asked by name, not by "did the preload load anything": the preload walks a whole
+    directory tree and would report success having loaded only nvrtc while cuBLAS itself
+    was missing, which is exactly the case CTranslate2 then dies on.
+    """
+    preload_cuda_libraries()
+    return _loadable("libcublas.so.12")
+
+
 def _cuda_usable() -> bool:
     """A visible device is not enough: the CUDA 12 libraries have to actually load.
 
     `get_cuda_device_count()` reports the driver's devices, which on this dev box is 1
-    even though the driver ships CUDA 13 and CTranslate2 wants 12. Trusting that count
-    alone produces "Library libcublas.so.12 is not found or cannot be loaded" at model
-    load time, several seconds later and with no hint about the cause. So: check that
-    libcublas.so.12 is genuinely loadable before claiming CUDA.
+    even though the system CUDA toolkit is 11.5 and CTranslate2 wants 12. Trusting that
+    count alone produces "Library libcublas.so.12 is not found or cannot be loaded" at
+    model load time, several seconds later and with no hint about the cause. So: check
+    that libcublas.so.12 is genuinely loadable before claiming CUDA.
     """
     if os.environ.get("SUBTITLER_FORCE_CPU"):
         return False
@@ -91,23 +135,56 @@ def _cuda_usable() -> bool:
     except Exception:
         return False
 
-    if preload_cuda_libraries():
-        return True
-    # Nothing was preloadable from the venv; fall back to whatever the system loader has.
+    return cublas12_loadable()
+
+
+def cuda_report() -> dict[str, Any]:
+    """Everything `subtitler doctor` needs to explain the GPU decision, as plain JSON.
+
+    Returned rather than printed so `doctor` can run this in a **subprocess**: answering
+    the question means dlopening several hundred megabytes of CUDA libraries with
+    RTLD_GLOBAL, and a dependency report has no business doing that to its own process
+    (nor paying the import cost on a Mac, where the answer is always "no CUDA here").
+
+    `usable` is `_cuda_usable()` itself, not a re-derivation of it, so the doctor can never
+    report something the engine then disagrees with.
+    """
+    report: dict[str, Any] = {
+        "ctranslate2": "",  # its version, once we know it is importable
+        "devices": 0,
+        "packages": [],
+        "cublas12": False,
+        "cudnn9": False,
+        "usable": False,
+        "error": "",
+    }
     try:
-        ctypes.CDLL("libcublas.so.12", mode=ctypes.RTLD_GLOBAL)
-    except OSError:
-        return False
-    return True
+        import ctranslate2
+
+        report["ctranslate2"] = getattr(ctranslate2, "__version__", "unknown")
+        report["devices"] = int(ctranslate2.get_cuda_device_count())
+    except Exception as exc:  # an import error, or a driver that cannot be queried
+        report["error"] = f"{type(exc).__name__}: {exc}"
+        return report
+
+    preload_cuda_libraries()
+    report["packages"] = sorted({d.parent.name for d in _nvidia_lib_dirs()})
+    report["cublas12"] = _loadable("libcublas.so.12")
+    report["cudnn9"] = _loadable("libcudnn.so.9")
+    report["usable"] = _cuda_usable()
+    return report
 
 
 class FasterWhisperEngine:
     name = BACKEND
     kind = "local"
 
-    def __init__(self, model: str = "large-v3", *, device: str = "auto") -> None:
+    def __init__(
+        self, model: str = "large-v3", *, device: str = "auto", batch_size: int = 0
+    ) -> None:
         self.spec = models.resolve(model, BACKEND)
         self.requested_device = device
+        self.requested_batch_size = max(0, int(batch_size))
         self._model: Any = None
         # Set once the model actually loads, which is the only reliable answer.
         self._resolved: tuple[str, str] | None = None
@@ -138,6 +215,17 @@ class FasterWhisperEngine:
             return "cuda", "float16"
         return ("cuda", "float16") if _cuda_usable() else ("cpu", "int8")
 
+    def effective_batch_size(self) -> int:
+        """Batching is a GPU throughput trick, so it is silently 0 anywhere else.
+
+        `BatchedInferencePipeline` runs on CPU too and is slower there than the sequential
+        path, so honouring the flag after a CUDA fallback would make an already-degraded
+        run worse. 0 means "decode sequentially", which is the default everywhere.
+        """
+        if self.requested_batch_size <= 0:
+            return 0
+        return self.requested_batch_size if self.resolve_device()[0] == "cuda" else 0
+
     def ensure_model(self, progress: Any = None) -> ModelInfo:
         path = models.local_path(self.spec) or models.download(self.spec, progress=progress)
         return ModelInfo(
@@ -157,6 +245,7 @@ class FasterWhisperEngine:
             "revision": self.spec.revision,
             "device": device,
             "compute_type": compute,
+            "batch_size": self.effective_batch_size(),
             "cuda_fallback": self._fallback_reason,
         }
 
@@ -208,7 +297,34 @@ class FasterWhisperEngine:
             self._force_cpu(str(exc))
             return self._decode(audio, opts)
 
+    @staticmethod
+    def _prompt_for(opts: TranscribeOptions, batch_size: int) -> str | None:
+        """The steering prompt, unless batching is on, in which case there is none.
+
+        Not a preference: `BatchedInferencePipeline` prepends `initial_prompt` to **every**
+        window in the file, because `generate_segment_batched` passes it as
+        `previous_tokens` for each batch element and there is no `prompt_reset_since` to
+        move past it. The sequential path resets that after the first 30-second window when
+        `condition_on_previous_text` is off, which is why only batched decoding is affected.
+
+        Measured on a 54-minute Serbian episode: batch 16 with the prompt attached echoed
+        "Zadrži srpski jezik i latinično pismo..." back as transcript text over and over and
+        came out 900 words (15%) short of the sequential transcript. Without the prompt the
+        same run produced 6231 words against sequential's 6186, with no echo at all. So the
+        prompt is dropped rather than the batching, and `--batch-size` documents the trade.
+        """
+        return None if batch_size else opts.initial_prompt
+
     def _decode(self, audio: Path, opts: TranscribeOptions) -> Transcript:
+        # Checked before anything is imported or loaded, so the message arrives instead of
+        # "No clip timestamps found" from deep inside faster-whisper's batched generator,
+        # which has nothing to chunk on when the VAD is off.
+        if self.effective_batch_size() and not opts.vad:
+            raise ValueError(
+                "batched decoding needs the VAD to split the audio into chunks; "
+                "use --batch-size 0 to decode sequentially without it"
+            )
+
         import ctranslate2
 
         # A fixed seed does not make CTranslate2 bit-deterministic, but it removes one
@@ -216,11 +332,19 @@ class FasterWhisperEngine:
         ctranslate2.set_random_seed(opts.seed)
 
         model = self._load()
+        batch_size = self.effective_batch_size()
+        runner, kwargs = model, {}
+        if batch_size:
+            from faster_whisper import BatchedInferencePipeline
+
+            runner = BatchedInferencePipeline(model=model)
+            kwargs["batch_size"] = batch_size
+
         started = time.monotonic()
-        segments_iter, info = model.transcribe(
+        segments_iter, info = runner.transcribe(
             str(audio),
             language=None if opts.language == "auto" else opts.language,
-            initial_prompt=opts.initial_prompt,
+            initial_prompt=self._prompt_for(opts, batch_size),
             beam_size=opts.beam_size,
             temperature=opts.temperature,
             word_timestamps=opts.word_timestamps,
@@ -229,6 +353,7 @@ class FasterWhisperEngine:
             condition_on_previous_text=opts.condition_on_previous_text,
             compression_ratio_threshold=opts.compression_ratio_threshold,
             vad_filter=opts.vad,
+            **kwargs,
         )
 
         segments = []
@@ -275,6 +400,10 @@ class FasterWhisperEngine:
                 "vad": opts.vad,
                 "device": device,
                 "compute_type": compute_type,
+                "batch_size": batch_size,
+                # Recorded because it is the one option the engine overrides on its own:
+                # a transcript decoded in batches was never steered by the prompt.
+                "initial_prompt": bool(self._prompt_for(opts, batch_size)),
                 "cuda_fallback": self._fallback_reason,
                 "seed": opts.seed,
             },

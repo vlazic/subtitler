@@ -47,6 +47,7 @@ subtitler run INPUT.m4a --canvas 1920x1080    # audio-only input gets a video ca
 subtitler run INPUT.mp4 --srt-only            # sidecar files, no video work
 subtitler run INPUT.mp4 --style-preset box    # outline | box | minimal
 subtitler run INPUT.mp4 --engine groq         # cloud instead of local
+subtitler run INPUT.mp3 --batch-size 16       # NVIDIA GPU: ~3x again, see below
 subtitler run INPUT.mp4 --denoise speech      # none | afftdn | arnndn | anlmdn | speech
 subtitler run INPUT.mp4 --fix                 # optional LLM correction pass
 subtitler run INPUT.mp4 --fix --fix-model openai/gpt-4o
@@ -150,11 +151,102 @@ and markup, so one line in the file covers every spelling of a station ident.
 | Engine | Where | Notes |
 |---|---|---|
 | `mlx` | macOS Apple Silicon | default on a Mac. `mlx-community/whisper-large-v3-mlx` |
-| `faster-whisper` | Linux, Intel Mac, any CPU | default elsewhere. CUDA when available |
+| `faster-whisper` | Linux, Intel Mac, any CPU | default elsewhere. CUDA when available, see below |
 | `groq` | anywhere with a key | `whisper-large-v3` and `-turbo`, for comparison or long files |
 
 The engine is chosen automatically from the platform. Asking for one explicitly that is not
 installed is a hard error with the exact `uv sync` command to fix it, never a silent fallback.
+
+## NVIDIA GPUs
+
+If you have one, use it. On a 54-minute Serbian episode, `faster-whisper` large-v3 on an
+RTX 3090 is **17x** faster than the same model on a 16-thread CPU, and **51x** with
+`--batch-size 16`. 47 minutes becomes 2 minutes 54, or 55 seconds.
+
+```bash
+uv sync --extra local --extra cuda   # the --extra cuda is the whole trick
+subtitler doctor                     # confirms the GPU and the runtime
+subtitler run gozba.mp3              # CUDA is picked automatically when it works
+```
+
+Nothing else changes: the device is chosen automatically, `--device cpu` forces the old
+path, and a CUDA runtime that turns out to be unusable degrades to the CPU mid-run and says
+so in the transcript's `cuda_fallback`.
+
+### The CUDA 11 vs 12 trap
+
+CTranslate2's wheels link against CUDA **12**. Your driver is almost certainly new enough,
+and that is not what is being checked. What matters is the CUDA *runtime libraries* on the
+machine, and a distribution that ships `nvcc` 11.5 has `libcublas.so.11`, which does not
+satisfy a link against `libcublas.so.12`. The symptom is this, minutes into a run:
+
+```
+Library libcublas.so.12 is not found or cannot be loaded
+```
+
+The fix is `--extra cuda`, which pulls `nvidia-cublas-cu12` and `nvidia-cudnn-cu12` into
+the venv as ordinary Python packages. Nothing is installed system-wide and the 11.5 toolkit
+is left alone. `engines/faster.py` opens those libraries with `RTLD_GLOBAL` before
+CTranslate2 starts, so they are already registered under their sonames when it looks. On a
+machine with no GPU there is nothing to preload and the whole thing is a no-op.
+
+`subtitler doctor` reports both halves separately, so a failure is attributable:
+
+```
+  ok    nvidia gpu       driver 580.159.03 (NVIDIA GeForce RTX 3090, 24576 MiB)
+  ok    cuda runtime     (CTranslate2 will decode on the GPU in float16)
+```
+
+Without `--extra cuda` the second line becomes a warning naming `libcublas.so.12` and the
+`uv sync` that fixes it. Neither line can ever fail the doctor: on a Mac and on a CPU-only
+box they read `n/a`.
+
+### `--batch-size`, and what it costs
+
+`--batch-size N` decodes N VAD chunks at once instead of walking the file sequentially. It
+is off by default, and turning it on is a real trade rather than free speed:
+
+**Batched decoding cannot use the steering prompt.** faster-whisper prepends
+`initial_prompt` to *every* window in batched mode, and the model starts writing the prompt
+into the transcript. On a 54-minute Serbian episode it echoed "Zadrži srpski jezik i
+latinično pismo..." back dozens of times and came out 900 words (15%) short. So the engine
+drops the prompt when batching, prints a line saying it did, and records
+`"initial_prompt": false` in the transcript params. Without the prompt the batched
+transcript is 6231 words against the sequential 6186, with no echo.
+
+For Serbian the prompt is worth keeping, so the default stays sequential. For a bulk
+back-catalogue where 4 hours versus 13 hours decides whether the job happens at all, batch.
+
+`16` is the recommended value on a 24 GB card. `32` is 6% faster and peaks at 22.5 GB,
+which leaves no room for a desktop session on the same GPU.
+
+### Measured
+
+RTX 3090, large-v3, Serbian. CPU is int8 on 16 threads, GPU is float16.
+
+| Input | Config | RTF | Wall clock |
+|---|---|---|---|
+| 109 s fixture | CPU int8 | 0.677 | 79 s |
+| 109 s fixture | CUDA float16 | 0.042 | 7.5 s |
+| 109 s fixture | CUDA float16, `--batch-size 16` | 0.021 | 5.2 s |
+| 54 min episode | CPU int8 | 0.869 | 46 min 52 s |
+| 54 min episode | CUDA float16 | 0.051 | 2 min 54 s |
+| 54 min episode | CUDA float16, `--batch-size 16` | 0.015 | 55 s |
+
+Long files are *worse* than short ones on the CPU (0.87 against 0.68) and no worse on the
+GPU, so the speedup grows with the thing you actually want to transcribe.
+
+The 353-episode, 260-hour `gozba` archive that motivated this: **9.4 days** on the CPU,
+**13 hours** on the GPU, **4 hours** batched.
+
+**The GPU transcript is not a degraded one.** On the 109 s fixture, CPU int8 and CUDA
+float16 produce byte-identical cue *text*; the only difference is timestamps, and by at
+most 40 ms on 6 of 20 cues. Over the whole 54-minute episode they agree on 96.9% of words
+(6148 against 6168), which is ordinary int8-versus-float16 drift and not lost content.
+
+A larger beam does not help and was not adopted: `beam_size` 8 was 7% slower than 5 on the
+fixture and 17% slower on the episode, for a transcript no closer to the reference. Nor
+does batch 32: 6% faster than 16 and 22.5 GB of VRAM against under 16.
 
 ## Verified on
 
@@ -168,7 +260,10 @@ installed is a hard error with the exact `uv sync` command to fix it, never a si
 | Any | `--fix` against Anthropic or Groq | not verified: no key for either on this machine |
 | ubuntu-latest CI | faster-whisper tiny | transcribe, burn-in, hostile paths, diacritics |
 | macOS 14 Apple Silicon CI, ffmpeg-full 8.1.2 | mlx tiny | transcribe (RTF 0.40), burn-in, hostile paths, diacritics |
-| Any | faster-whisper on CUDA | not verified: this dev box has CUDA 13 and CTranslate2 wants 12 |
+| Pop!_OS 22.04, RTX 3090 | faster-whisper large-v3, CUDA float16 | 109s at RTF 0.042 and 54min at RTF 0.051, GPU at 85-100% throughout |
+| Pop!_OS 22.04, RTX 3090 | the same, `--batch-size 16` | 54min at RTF 0.015, under 16 GB VRAM |
+| Pop!_OS 22.04, RTX 3090 | CPU int8 against CUDA float16 | identical cue text on the 109s fixture, 96.9% word agreement over 54 minutes |
+| Pop!_OS 22.04, no `--extra cuda` | the CUDA-less fallback | doctor warns and names `libcublas.so.12`, the run decodes on the CPU, exit 0 |
 
 Both CI runners render `ČĆĐŠŽ čćđšž` identically from the bundled font, which is what the
 bundling is for. CI transcribes with `tiny`, which is fast and cheap and produces poor

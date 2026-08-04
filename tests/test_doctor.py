@@ -7,19 +7,24 @@ the real machine directly, these tests stop meaning anything.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from subtitler.doctor import (
+    CUDA_PROBE_ARGV,
     DEPS,
     FAIL,
+    NVIDIA_SMI_QUERY,
     OK,
     SKIP,
     WARN,
     Platform,
     Probe,
+    check_cuda_runtime,
     check_ffmpeg,
+    check_gpu,
     check_groq,
     check_libass,
     check_local_engine,
@@ -216,6 +221,112 @@ class TestEngines:
     def test_groq_accepts_the_key_pool(self) -> None:
         probe = fake_probe(modules={"groq"}, env={"GROQ_API_KEYS": "a,b,c"})
         assert check_groq(POP, probe).status == OK
+
+
+def cuda_probe_output(**fields) -> dict[tuple[str, ...], str]:
+    """What `subtitler.engines.faster.cuda_report()` prints, as the probe would see it."""
+    report = {
+        "ctranslate2": "4.8.1",
+        "devices": 1,
+        "packages": ["cublas", "cudnn"],
+        "cublas12": True,
+        "cudnn9": True,
+        "usable": True,
+        "error": "",
+    }
+    report.update(fields)
+    # CTranslate2 logs to stderr and `Probe.output` concatenates both streams, so the real
+    # thing is never a bare JSON document. Reproduce that here or the parser is untested.
+    return {
+        CUDA_PROBE_ARGV: "[info] Using CUDA allocator: cuda_malloc_async\n" + json.dumps(report)
+    }
+
+
+SMI_3090 = {NVIDIA_SMI_QUERY: "NVIDIA GeForce RTX 3090, 580.159.03, 24576\n"}
+
+
+class TestGpu:
+    """Every one of these must come out `n/a` or `warn`, never `fail`.
+
+    CI has no GPU on either runner and the primary target is a Mac. A GPU check that can
+    block `subtitler doctor` is a check that turns both of those machines red.
+    """
+
+    def test_a_real_card_is_reported_with_its_vram(self) -> None:
+        result = check_gpu(POP, fake_probe(present={"nvidia-smi"}, outputs=SMI_3090))
+        assert result.status == OK
+        assert "580.159.03" in result.version
+        assert "RTX 3090" in result.detail
+        assert "24576" in result.detail
+
+    def test_no_driver_is_not_a_failure(self) -> None:
+        result = check_gpu(POP, fake_probe())
+        assert result.status == SKIP
+        assert "CPU" in result.detail
+
+    def test_macos_is_skipped_without_running_anything(self) -> None:
+        assert check_gpu(MAC, fake_probe(present={"nvidia-smi"})).status == SKIP
+        assert check_cuda_runtime(MAC, fake_probe(present={"nvidia-smi"})).status == SKIP
+
+    def test_driver_tools_present_but_no_card(self) -> None:
+        probe = fake_probe(present={"nvidia-smi"}, outputs={NVIDIA_SMI_QUERY: "\n"})
+        assert check_gpu(POP, probe).status == SKIP
+
+    def test_a_working_runtime_reports_float16(self) -> None:
+        probe = fake_probe(
+            present={"nvidia-smi"},
+            outputs={**SMI_3090, **cuda_probe_output()},
+            modules={"ctranslate2"},
+        )
+        result = check_cuda_runtime(POP, probe)
+        assert result.status == OK
+        assert "float16" in result.detail
+
+    def test_the_cuda_11_vs_12_trap_warns_and_names_the_library(self) -> None:
+        """The whole reason this check exists. A machine can have a current driver and a
+        system CUDA toolkit that is 11.x, and CTranslate2's wheels want 12. The symptom is
+        `libcublas.so.12: cannot open shared object file` at model load time, minutes into
+        a run, with nothing pointing at `uv sync --extra cuda`."""
+        probe = fake_probe(
+            present={"nvidia-smi"},
+            outputs={**SMI_3090, **cuda_probe_output(cublas12=False, usable=False)},
+            modules={"ctranslate2"},
+        )
+        result = check_cuda_runtime(POP, probe)
+        assert result.status == WARN
+        assert "libcublas.so.12" in result.detail
+        assert "CPU" in result.detail
+        cuda_dep = next(d for d in DEPS if d.key == "cuda")
+        assert "--extra cuda" in cuda_dep.fix_for(POP)
+
+    def test_a_gpu_the_engine_cannot_see_is_not_a_warning(self) -> None:
+        """A card the driver shows but CTranslate2 does not is n/a, not a problem: an
+        integrated display adapter is the common case and nothing is broken."""
+        probe = fake_probe(
+            present={"nvidia-smi"},
+            outputs={**SMI_3090, **cuda_probe_output(devices=0, usable=False)},
+            modules={"ctranslate2"},
+        )
+        assert check_cuda_runtime(POP, probe).status == SKIP
+
+    def test_no_faster_whisper_means_nothing_to_report(self) -> None:
+        probe = fake_probe(present={"nvidia-smi"}, outputs=SMI_3090)
+        assert check_cuda_runtime(POP, probe).status == SKIP
+
+    def test_a_probe_that_says_nothing_warns_rather_than_claiming_cuda(self) -> None:
+        probe = fake_probe(
+            present={"nvidia-smi"},
+            outputs={**SMI_3090, CUDA_PROBE_ARGV: "Traceback (most recent call last):\n"},
+            modules={"ctranslate2"},
+        )
+        assert check_cuda_runtime(POP, probe).status == WARN
+
+    def test_neither_gpu_check_can_ever_block(self) -> None:
+        for plat in (MAC, MAC_ROSETTA, POP, UBUNTU, ARCH):
+            statuses = diagnose(plat, fake_probe(present={"nvidia-smi"}), DEPS)
+            blocking = {s.dep.key for s in statuses if s.blocking}
+            assert "gpu" not in blocking
+            assert "cuda" not in blocking
 
 
 class TestFixes:

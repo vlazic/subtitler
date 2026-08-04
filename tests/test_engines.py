@@ -1,26 +1,35 @@
 """Engine selection, the model registry, and the shared decode hygiene.
 
-None of this needs a model or a GPU: selection, availability messaging and the silence
-gate are all exercisable on any machine, which is the point.
+None of this needs a model or a GPU: selection, availability messaging, the silence gate
+and every CUDA decision are all exercisable on any machine, which is the point. The GPU
+paths below are driven through fakes for the same reason `test_doctor.py` fakes `Platform`:
+CI has no NVIDIA card and the maintainer's friend has a Mac.
 """
 
 from __future__ import annotations
 
+import importlib
 import struct
+import sys
 import wave
 from pathlib import Path
 
 import pytest
 
 from subtitler import models
-from subtitler.engines import ALL_ENGINES, EngineUnavailable, default_order, resolve
+from subtitler.engines import ALL_ENGINES, EngineUnavailable, _build, default_order, resolve
 from subtitler.engines.base import (
     SILENT_PEAK_DBFS,
     TranscribeOptions,
     drop_silent_segments,
     peak_dbfs,
 )
-from subtitler.engines.faster import FasterWhisperEngine
+from subtitler.engines.faster import (
+    DEFAULT_BATCH_SIZE,
+    FasterWhisperEngine,
+    _nvidia_lib_dirs,
+    preload_cuda_libraries,
+)
 from subtitler.engines.mlx import MlxWhisperEngine, _supported_kwargs
 from subtitler.model import Segment
 
@@ -177,6 +186,104 @@ class TestMlxKwargFiltering:
         def fake(audio, **kwargs): ...
 
         assert _supported_kwargs(fake, {"anything": 1, "nothing": None}) == {"anything": 1}
+
+
+class TestCudaLibraryDiscovery:
+    def test_namespace_packages_have_no_dunder_file(self, tmp_path, monkeypatch) -> None:
+        """Regression: the preload looked for the CUDA libraries in the wrong directory.
+
+        `nvidia`, `nvidia.cublas` and `nvidia.cublas.lib` ship no `__init__.py`, so they
+        are namespace packages and `__file__` is None. The original code did
+        `Path(module.__file__ or "").parent`, which is `Path(".")`, so it looked for
+        libcublas.so.12 in the current working directory, never found it, and reported
+        "nothing to preload" on a machine with every library installed. It had never
+        loaded a single one.
+        """
+        lib = tmp_path / "fakenvidia" / "cublas" / "lib"
+        lib.mkdir(parents=True)
+        (lib / "libcublas.so.12").write_bytes(b"not really a library")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        importlib.invalidate_caches()
+        module = importlib.import_module("fakenvidia")
+        try:
+            assert module.__file__ is None, "the trap only exists for namespace packages"
+            assert Path(module.__file__ or "").parent == Path("."), "the bug, reproduced"
+            assert _nvidia_lib_dirs(list(module.__path__)) == [lib]
+        finally:
+            sys.modules.pop("fakenvidia", None)
+
+    def test_missing_directories_are_not_an_error(self, tmp_path) -> None:
+        assert _nvidia_lib_dirs([str(tmp_path)]) == []
+
+    def test_preload_survives_libraries_that_will_not_load(self, tmp_path, monkeypatch) -> None:
+        """A CPU-only machine, and a broken install, must both degrade to False.
+
+        The engine's answer to "is CUDA usable" is allowed to be no; it is never allowed
+        to be an exception raised while merely asking.
+        """
+        lib = tmp_path / "cublas" / "lib"
+        lib.mkdir(parents=True)
+        (lib / "libcublas.so.12").write_bytes(b"\x00 not an ELF file")
+        monkeypatch.setattr("subtitler.engines.faster._cuda_preloaded", None)
+        monkeypatch.setattr("subtitler.engines.faster._nvidia_lib_dirs", lambda roots=None: [lib])
+        assert preload_cuda_libraries() is False
+
+
+class TestBatching:
+    """`--batch-size` is a CUDA-only knob and must stay invisible everywhere else."""
+
+    def test_off_by_default(self) -> None:
+        assert FasterWhisperEngine("large-v3").effective_batch_size() == 0
+        assert FasterWhisperEngine("large-v3").describe()["batch_size"] == 0
+
+    def test_ignored_on_cpu(self) -> None:
+        """BatchedInferencePipeline runs on CPU and is slower there than the sequential
+        path, so honouring the flag after a CUDA fallback makes a bad run worse."""
+        engine = FasterWhisperEngine("large-v3", device="cpu", batch_size=DEFAULT_BATCH_SIZE)
+        assert engine.resolve_device() == ("cpu", "int8")
+        assert engine.effective_batch_size() == 0
+
+    def test_honoured_on_cuda(self) -> None:
+        engine = FasterWhisperEngine("large-v3", device="cuda", batch_size=8)
+        assert engine.effective_batch_size() == 8
+        assert engine.describe()["batch_size"] == 8
+
+    def test_negative_batch_size_means_off(self) -> None:
+        assert (
+            FasterWhisperEngine("large-v3", device="cuda", batch_size=-4).effective_batch_size()
+            == 0
+        )
+
+    def test_batching_drops_the_steering_prompt(self) -> None:
+        """Regression, measured on a 54-minute Serbian episode: batched decoding echoed
+        the steering prompt back as transcript text over and over and lost 15% of the
+        speech. `generate_segment_batched` passes `initial_prompt` as `previous_tokens`
+        for every window in the file, and unlike the sequential path there is no
+        `prompt_reset_since` that moves past it after the first one."""
+        opts = TranscribeOptions()
+        assert opts.initial_prompt  # the Serbian prompt is on by default
+        assert FasterWhisperEngine._prompt_for(opts, 0) == opts.initial_prompt
+        assert FasterWhisperEngine._prompt_for(opts, 16) is None
+
+    def test_the_registry_passes_it_only_to_faster_whisper(self) -> None:
+        """Every builder accepts it so callers need not know which engine uses it.
+
+        `_build` rather than `resolve`, because `resolve` also checks availability and the
+        weights are not downloaded on a CI runner."""
+        engine = _build("faster-whisper", model="large-v3", device="cuda", batch_size=8)
+        assert isinstance(engine, FasterWhisperEngine)
+        assert engine.requested_batch_size == 8
+        # mlx and groq take the argument and ignore it rather than raising.
+        for name in ("mlx", "groq", "groq-turbo"):
+            assert _build(name, model="large-v3", device="auto", batch_size=8)
+
+    def test_batching_without_vad_is_rejected_with_the_fix(self) -> None:
+        """faster-whisper raises "No clip timestamps found" from deep inside the batched
+        generator: with the VAD off it has nothing to chunk on."""
+        engine = FasterWhisperEngine("large-v3", device="cuda", batch_size=8)
+        with pytest.raises(ValueError) as exc:
+            engine._decode(Path("nope.wav"), TranscribeOptions(vad=False))
+        assert "--batch-size 0" in str(exc.value)
 
 
 class TestOptions:

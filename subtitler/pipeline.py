@@ -50,6 +50,9 @@ class RunConfig:
     engine: str = "auto"
     model: str = "large-v3"
     device: str = "auto"
+    # 0 means decode sequentially. Only faster-whisper on CUDA honours it; see
+    # `FasterWhisperEngine._prompt_for` for what it costs.
+    batch_size: int = 0
     language: str = "sr"
     prompt: str | None = None
     denoise: str = "none"
@@ -135,8 +138,18 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
 
     audio_wav, audio_key = _audio(cfg, cache, src, source_id, work, log)
 
-    engine = resolve(cfg.engine, model=cfg.model, device=cfg.device)
-    log(f"engine: {engine.name} ({engine.describe().get('model')})")
+    engine = resolve(cfg.engine, model=cfg.model, device=cfg.device, batch_size=cfg.batch_size)
+    described = engine.describe()
+    log(f"engine: {engine.name} ({described.get('model')}, {described.get('device', 'n/a')})")
+    if described.get("batch_size"):
+        # Loud, because it changes the transcript and not just its speed.
+        log(
+            f"batched decoding: {described['batch_size']} chunks at a time. "
+            "The steering prompt is NOT sent in this mode; batched decoding echoes it "
+            "back as transcript text. Use --batch-size 0 to keep it."
+        )
+    elif cfg.batch_size and engine.name == "faster-whisper":
+        log(f"--batch-size {cfg.batch_size} ignored: batching only helps on CUDA")
 
     opts = TranscribeOptions(language=cfg.language)
     if cfg.prompt is not None:

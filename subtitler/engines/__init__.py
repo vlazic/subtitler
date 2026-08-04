@@ -29,11 +29,15 @@ __all__ = [
 
 ALL_ENGINES = ("mlx", "faster-whisper", "groq", "groq-turbo")
 
-_BUILDERS: dict[str, Callable[[str, str], Engine]] = {
-    "mlx": lambda model, device: MlxWhisperEngine(model, device=device),
-    "faster-whisper": lambda model, device: FasterWhisperEngine(model, device=device),
-    "groq": lambda model, _device: GroqEngine(model),
-    "groq-turbo": lambda _model, _device: GroqEngine("turbo"),
+# `batch_size` is a faster-whisper-on-CUDA knob; every other backend takes it and drops it
+# rather than the caller having to know which engine it applies to.
+_BUILDERS: dict[str, Callable[[str, str, int], Engine]] = {
+    "mlx": lambda model, device, _batch: MlxWhisperEngine(model, device=device),
+    "faster-whisper": lambda model, device, batch: FasterWhisperEngine(
+        model, device=device, batch_size=batch
+    ),
+    "groq": lambda model, _device, _batch: GroqEngine(model),
+    "groq-turbo": lambda _model, _device, _batch: GroqEngine("turbo"),
 }
 
 
@@ -57,11 +61,11 @@ def default_order(apple_silicon: bool | None = None) -> tuple[str, ...]:
     return (*local, "groq", "groq-turbo")
 
 
-def _build(name: str, *, model: str, device: str) -> Engine:
+def _build(name: str, *, model: str, device: str, batch_size: int = 0) -> Engine:
     builder = _BUILDERS.get(name)
     if builder is None:
         raise EngineUnavailable(name, "unknown engine", f"choose from: {', '.join(ALL_ENGINES)}")
-    return builder(model, device)
+    return builder(model, device, batch_size)
 
 
 def available_engines(*, model: str = "large-v3", device: str = "auto") -> dict[str, Availability]:
@@ -77,9 +81,15 @@ def available_engines(*, model: str = "large-v3", device: str = "auto") -> dict[
     return result
 
 
-def resolve(name: str = "auto", *, model: str = "large-v3", device: str = "auto") -> Engine:
+def resolve(
+    name: str = "auto",
+    *,
+    model: str = "large-v3",
+    device: str = "auto",
+    batch_size: int = 0,
+) -> Engine:
     if name != "auto":
-        engine = _build(name, model=model, device=device)
+        engine = _build(name, model=model, device=device, batch_size=batch_size)
         avail = engine.availability()
         if not avail.ok:
             raise EngineUnavailable(name, avail.reason, avail.fix)
@@ -88,7 +98,7 @@ def resolve(name: str = "auto", *, model: str = "large-v3", device: str = "auto"
     problems: list[str] = []
     for candidate in default_order():
         try:
-            engine = _build(candidate, model=model, device=device)
+            engine = _build(candidate, model=model, device=device, batch_size=batch_size)
             avail = engine.availability()
         except (EngineUnavailable, LookupError) as exc:
             problems.append(f"  {candidate}: {exc}")

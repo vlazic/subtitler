@@ -10,6 +10,7 @@ find), both of which tests replace with fakes. Nothing here calls `subprocess` o
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import platform as _platform
 import re
@@ -360,6 +361,105 @@ def check_local_engine(plat: Platform, probe: Probe) -> CheckResult:
     return CheckResult(WARN, detail="faster-whisper is not installed")
 
 
+# --------------------------------------------------------------------------------------
+# The GPU, which most machines running this do not have
+# --------------------------------------------------------------------------------------
+#
+# Both checks below degrade to `n/a`, never to a failure. macOS is the primary target and
+# has no CUDA at all; both CI runners are CPU-only. A GPU report that can fail CI is a
+# report nobody can keep green.
+
+NVIDIA_SMI_QUERY = (
+    "nvidia-smi",
+    "--query-gpu=name,driver_version,memory.total",
+    "--format=csv,noheader,nounits",
+)
+
+# Run out-of-process on purpose: answering "can CTranslate2 use this device" means
+# dlopening several hundred megabytes of CUDA libraries with RTLD_GLOBAL, and `doctor`
+# should not do that to itself. Going through `Probe.output` also keeps it fakeable.
+CUDA_PROBE_ARGV = (
+    sys.executable,
+    "-c",
+    "import json; from subtitler.engines.faster import cuda_report; print(json.dumps(cuda_report()))",
+)
+
+
+def _no_nvidia(plat: Platform, probe: Probe) -> CheckResult | None:
+    """The shared "there is nothing to report here" answer, or None to carry on."""
+    if plat.is_macos:
+        return CheckResult(SKIP, detail="no CUDA on macOS; mlx uses the Apple GPU instead")
+    if not probe.which("nvidia-smi"):
+        return CheckResult(SKIP, detail="no NVIDIA driver found; transcription runs on the CPU")
+    return None
+
+
+def check_gpu(plat: Platform, probe: Probe) -> CheckResult:
+    """Which NVIDIA GPU this is, and how much VRAM it has."""
+    absent = _no_nvidia(plat, probe)
+    if absent is not None:
+        return absent
+    out = probe.output(list(NVIDIA_SMI_QUERY))
+    line = (out or "").strip().splitlines()[0] if (out or "").strip() else ""
+    parts = [p.strip() for p in line.split(",")]
+    if len(parts) < 3:
+        return CheckResult(SKIP, detail="nvidia-smi is installed but reported no GPU")
+    name, driver, memory = parts[0], parts[1], parts[2]
+    return CheckResult(OK, f"driver {driver}", f"{name}, {memory} MiB")
+
+
+def _parse_json_line(text: str) -> dict[str, Any] | None:
+    """CTranslate2 logs to stderr, and `Probe.output` concatenates both streams.
+
+    So the payload is whichever line parses, not the first line and not the whole blob.
+    """
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def check_cuda_runtime(plat: Platform, probe: Probe) -> CheckResult:
+    """Whether faster-whisper will actually decode on the GPU here.
+
+    The trap this exists to name: CTranslate2's wheels link against CUDA **12**, and a
+    machine can have a perfectly good driver plus a system toolkit that is 11.x. The
+    driver is not the problem, the runtime libraries are, and the symptom is
+    `libcublas.so.12: cannot open shared object file` at model load time with no hint that
+    `uv sync --extra cuda` is the fix.
+    """
+    absent = _no_nvidia(plat, probe)
+    if absent is not None:
+        return absent
+    if not probe.module_available("ctranslate2"):
+        return CheckResult(SKIP, detail="faster-whisper is not installed")
+
+    report = _parse_json_line(probe.output(list(CUDA_PROBE_ARGV), timeout=180) or "")
+    if report is None:
+        return CheckResult(WARN, detail="the CUDA probe produced no answer")
+    if report.get("error"):
+        return CheckResult(WARN, detail=str(report["error"]))
+    if not report.get("devices"):
+        return CheckResult(SKIP, detail="CTranslate2 sees no CUDA device")
+    if report.get("usable"):
+        return CheckResult(OK, detail="CTranslate2 will decode on the GPU in float16")
+
+    missing = [
+        name
+        for name, key in (("libcublas.so.12", "cublas12"), ("libcudnn.so.9", "cudnn9"))
+        if not report.get(key)
+    ]
+    detail = f"a GPU is present but {', '.join(missing) or 'the CUDA runtime'} will not load"
+    return CheckResult(WARN, detail=f"{detail}; transcription falls back to the CPU")
+
+
 def check_groq(plat: Platform, probe: Probe) -> CheckResult:
     has_pkg = probe.module_available("groq")
     has_key = bool(probe.env.get("GROQ_API_KEY") or probe.env.get("GROQ_API_KEYS"))
@@ -475,6 +575,21 @@ DEPS: tuple[Dep, ...] = (
         check=check_local_engine,
         manual="uv sync --extra mlx     # on Apple Silicon\n"
         "       uv sync --extra local   # everywhere else",
+    ),
+    Dep(
+        key="gpu",
+        label="nvidia gpu",
+        required=False,
+        why="faster-whisper decodes about 16x faster on CUDA than on the CPU",
+        check=check_gpu,
+    ),
+    Dep(
+        key="cuda",
+        label="cuda runtime",
+        required=False,
+        why="CTranslate2 needs CUDA 12 libraries, whatever the system toolkit is",
+        check=check_cuda_runtime,
+        manual="uv sync --extra local --extra cuda",
     ),
     Dep(
         key="engine-cloud",

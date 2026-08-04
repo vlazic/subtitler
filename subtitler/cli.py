@@ -13,9 +13,11 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-# Imported at module scope only for the flag defaults. `postedit` is cheap: LiteLLM is
-# imported lazily inside it, so `--help` and a run without `--fix` never pay for it.
+# Imported at module scope only for the flag defaults. Both are cheap: LiteLLM is imported
+# lazily inside `postedit` and faster-whisper inside `engines.faster`, so `--help` and a run
+# without `--fix` never pay for either.
 from subtitler import __version__, postedit
+from subtitler.engines import faster as engines_faster
 
 # Subcommands land phase by phase. Anything still stubbed exits with a clear message
 # naming the phase rather than an AttributeError or a half-run pipeline.
@@ -56,6 +58,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_run.add_argument("--model", default="large-v3")
     p_run.add_argument("--device", default="auto", help="auto | cpu | cuda")
+    p_run.add_argument(
+        "--batch-size",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "decode N chunks at a time on CUDA (faster-whisper only; 0 = sequential, the "
+            f"default). {engines_faster.DEFAULT_BATCH_SIZE} is about 3x faster on a 24 GB "
+            "card, at the cost of the steering prompt, which batched decoding echoes into "
+            "the transcript"
+        ),
+    )
     p_run.add_argument(
         "--lang",
         default="sr",
@@ -213,6 +227,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         engine=args.engine,
         model=args.model,
         device=args.device,
+        batch_size=args.batch_size,
         language=args.lang,
         prompt=prompt,
         denoise=args.denoise,

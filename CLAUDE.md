@@ -83,6 +83,18 @@ primary target**, Linux is the development platform.
   them back together would put the denoiser in the extraction's cache key, so changing
   `--denoise` would demux a 3 GB source again instead of filtering the WAV already on disk.
 - `/etc/os-release` on this dev box is `ID=pop`, `ID_LIKE="ubuntu debian"`. Match on both.
+- **`nvidia.cublas.lib` has no `__file__`.** The pip CUDA packages are namespace packages,
+  so `Path(module.__file__ or "").parent` is `Path(".")` and the CUDA preload looked for
+  every library in the current working directory. It reported "nothing to preload" on a
+  machine with all of them installed and had never loaded one. Use `__path__`.
+- **The system CUDA toolkit is 11.5 and CTranslate2 wants 12.** Not a driver problem: 580
+  supports 12 and 13. `uv sync --extra cuda` puts the cu12 libraries in the venv and
+  `engines/faster.py` opens them `RTLD_GLOBAL` before CTranslate2 looks.
+- **Batched decoding cannot carry `initial_prompt`.** `generate_segment_batched` passes it
+  as `previous_tokens` for every window in the file, with no `prompt_reset_since` to move
+  past it the way the sequential path has. On a 54-minute episode the model echoed the
+  Serbian steering prompt back as transcript text and lost 15% of the speech. `--batch-size`
+  therefore drops the prompt and says so; do not "fix" that by passing it through.
 - Current Claude models reject `temperature`/`top_p`/`top_k` with a 400. `postedit.py` must
   not send sampling parameters unless the user asks explicitly.
 - **LiteLLM's `num_retries` needs `tenacity`, and LiteLLM does not depend on it.** Without

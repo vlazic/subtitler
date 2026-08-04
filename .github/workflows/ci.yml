@@ -98,7 +98,23 @@ jobs:
       - name: Doctor
         # Must pass on a runner where only ffmpeg and uv were installed. Any required
         # dependency the doctor cannot see here is one the friend will hit too.
-        run: uv run subtitler doctor
+        #
+        # The GPU checks are the reason for the second half: neither runner has an NVIDIA
+        # card and the primary target is a Mac, so they must report n/a (or at worst a
+        # warning) and never block. A GPU check that can fail here is a check that turns
+        # every machine without a GPU red.
+        run: |
+          uv run subtitler doctor
+          uv run subtitler doctor --json > /tmp/doctor.json
+          python -c "
+          import json, sys
+          deps = {d['key']: d for d in json.load(open('/tmp/doctor.json'))['deps']}
+          for key in ('gpu', 'cuda'):
+              d = deps[key]
+              print(key, d['status'], d['detail'])
+              assert not d['required'], f'{key} must never be required'
+              assert d['status'] in {'skip', 'warn'}, f'{key} reported {d[\"status\"]} on a GPU-less runner'
+          "
 
       - name: CLI smoke test
         run: |
@@ -141,6 +157,13 @@ jobs:
           uv run subtitler lint /tmp/local/tiny-10s.srt
           echo "--- transcript ---"
           cat /tmp/local/tiny-10s.srt
+          # --batch-size is a faster-whisper-on-CUDA knob. On a runner it has no GPU to
+          # apply to, and must be ignored with a note rather than crashing or quietly
+          # producing a worse transcript.
+          uv run subtitler run fixtures/tiny-10s.wav --model tiny --batch-size 16 \
+            --srt-only -o /tmp/batched 2>&1 | tee /tmp/batched.log
+          test -s /tmp/batched/tiny-10s.srt
+          cmp /tmp/local/tiny-10s.srt /tmp/batched/tiny-10s.srt
 
       - name: Stage cache
         # PRD acceptance 6: a re-run hits the cache and produces identical output. The
