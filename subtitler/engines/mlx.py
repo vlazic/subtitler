@@ -27,6 +27,7 @@ from subtitler.engines.base import (
     TranscribeOptions,
     collapse_repetition,
     drop_silent_segments,
+    prompt_echoed,
 )
 from subtitler.model import Segment, Transcript, Word
 
@@ -91,17 +92,36 @@ class MlxWhisperEngine:
     # ---------------------------------------------------------------- transcription
 
     def transcribe(self, audio: Path, opts: TranscribeOptions) -> Transcript:
+        """Decode, and decode a second time without the prompt if the first echoed it.
+
+        The same hole as `faster.py`, for the same reason: mlx-whisper carries
+        `initial_prompt` into the first 30-second window, and a clip shorter than one
+        window never reaches the reset that would drop it, so the prompt can come back as
+        the entire transcript. The retry is the identical one, and the identical detector
+        decides it. Untestable on the primary target from here (non-negotiable 5), which is
+        why the check is a shared function rather than a second copy of the reasoning.
+        """
         avail = self.availability()
         if not avail.ok:
             raise EngineUnavailable(self.name, avail.reason, avail.fix)
 
+        transcript = self._decode(audio, opts, opts.initial_prompt)
+        echo_n, echo_text = prompt_echoed(transcript.text, opts.initial_prompt)
+        if not echo_n:
+            return transcript
+
+        transcript = self._decode(audio, opts, None)
+        transcript.params["prompt_echo_retry"] = echo_text
+        return transcript
+
+    def _decode(self, audio: Path, opts: TranscribeOptions, prompt: str | None) -> Transcript:
         import mlx_whisper
 
         path = models.local_path(self.spec)
         wanted: dict[str, Any] = {
             "path_or_hf_repo": str(path),
             "language": None if opts.language == "auto" else opts.language,
-            "initial_prompt": opts.initial_prompt,
+            "initial_prompt": prompt,
             "temperature": opts.temperature,
             "word_timestamps": opts.word_timestamps,
             "condition_on_previous_text": opts.condition_on_previous_text,

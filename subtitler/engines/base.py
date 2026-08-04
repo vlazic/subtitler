@@ -158,6 +158,25 @@ def drop_silent_segments(
     return tuple(s for s in segments if peak_dbfs(wav_path, s.start, s.end) > threshold_dbfs)
 
 
+def prompt_echoed(text: str, prompt: str | None) -> tuple[int, str]:
+    """How much of the steering prompt came back as transcript text, and which part.
+
+    One detector for this failure, not a second one. `bench.metrics.prompt_echo` was
+    written when `--denoise arnndn` made the **sequential** path open with the tail of
+    `SERBIAN_PROMPT` instead of the first fifty words of a lecture, and it is exactly the
+    check the decode path needs: a contiguous run of the prompt's own tokens in the
+    prompt's own order, which no ordinary Serbian sentence produces by accident.
+
+    Imported inside the function because `bench.metrics` imports `SERBIAN_PROMPT` from
+    this module, and a module-level import here would close that circle.
+    """
+    if not prompt or not text:
+        return 0, ""
+    from subtitler.bench.metrics import prompt_echo
+
+    return prompt_echo(text, prompt)
+
+
 def collapse_repetition(
     text: str,
     *,

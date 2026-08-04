@@ -263,6 +263,63 @@ class TestDryRun:
         assert engine.calls == 1
 
 
+class TestPromptEchoIsReported:
+    """Regression: a run that transcribed the steering prompt reported plain success.
+
+    A sub-30-second clip with no speech in it produced the single cue "Zadrži srpski jezik
+    i latinično pismo." and the pipeline reported one cue, `lint_violations: []` and no
+    warning at all, so the user got confident-looking garbage. Nothing downstream could
+    object: the text is well-formed Serbian of a perfectly readable length.
+    """
+
+    ECHO = "Zadrži srpski jezik i latinično pismo"
+
+    def test_a_transcript_that_is_the_prompt_warns(self, tmp_path, fakes, monkeypatch):
+        engine, _ = fakes
+        engine.text = self.ECHO
+        lines: list[str] = []
+
+        result = run_pipeline(cfg(tmp_path, srt_only=True), log=lines.append)
+
+        assert result.warnings, "the run must not report success in silence"
+        assert "steering prompt" in result.warnings[0]
+        assert any(line.startswith("warning:") for line in lines), "same channel as the stages"
+        # On the same channel the GUI reads, next to the lint list it must not be part of.
+        assert result.to_dict()["warnings"] == result.warnings
+        assert result.to_dict()["lint_violations"] == []
+
+    def test_ordinary_speech_warns_about_nothing(self, tmp_path, fakes):
+        result = run_pipeline(cfg(tmp_path, srt_only=True), log=lambda _m: None)
+        assert result.warnings == []
+
+    def test_a_cached_transcript_still_reports_the_retry(self, tmp_path, fakes, monkeypatch):
+        """The engine has no log channel, so it records the retry in `transcript.json`. A
+        second run reads that back rather than re-deciding it from a transcript that is,
+        by then, correctly free of the prompt."""
+        engine, _ = fakes
+        real = engine.transcribe
+
+        def with_retry(audio, opts):
+            transcript = real(audio, opts)
+            transcript.params["prompt_echo_retry"] = self.ECHO
+            return transcript
+
+        monkeypatch.setattr(engine, "transcribe", with_retry)
+        first = run_pipeline(cfg(tmp_path, srt_only=True), log=lambda _m: None)
+        second = run_pipeline(cfg(tmp_path, srt_only=True), log=lambda _m: None)
+
+        assert "transcribe" in second.cached
+        assert first.warnings == second.warnings
+        assert "unsteered" in second.warnings[0]
+
+    def test_an_empty_prompt_cannot_be_echoed(self, tmp_path, fakes):
+        """`--prompt ''` is the escape hatch the warning recommends, so it must be quiet."""
+        engine, _ = fakes
+        engine.text = self.ECHO
+        result = run_pipeline(cfg(tmp_path, srt_only=True, prompt=""), log=lambda _m: None)
+        assert result.warnings == []
+
+
 class TestFixStage:
     """`--fix` as a pipeline stage: cached, chained, and unable to move a timestamp.
 

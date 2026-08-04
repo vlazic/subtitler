@@ -170,6 +170,104 @@ class TestSilenceGate:
         assert peak_dbfs(path, 0.5, 0.5) == -float("inf")
 
 
+class TestPromptEchoRetry:
+    """Regression: a clip shorter than 30 seconds echoed the steering prompt as transcript.
+
+    The first 10 seconds of a YouTube episode (titles and music, no speech) came back as
+    the single cue "Zadrži srpski jezik i latinično pismo." with word confidences of 0.02
+    to 0.11, and passing a different `--prompt` produced that prompt instead. `_prompt_for`
+    only dropped the prompt for batched decoding, on the claim that the sequential path is
+    safe because it resets after the first 30-second window: a clip shorter than one window
+    never reaches that reset, and on a longer file window one is exposed just the same,
+    which is how `--denoise arnndn` lost the opening of a 164-second lecture.
+    """
+
+    ECHO = "Zadrži srpski jezik i latinično pismo."
+    SPEECH = "Ovo je ono što je govornik zaista rekao u snimku."
+
+    def fake_faster_whisper(self, monkeypatch, engine, texts):
+        """Give `_decode_with` a decoder that returns `texts[n]` on its n-th call."""
+        seen: list[str | None] = []
+
+        def transcribe(path, **kwargs):
+            seen.append(kwargs["initial_prompt"])
+            segment = types.SimpleNamespace(
+                start=0.0, end=5.0, text=texts[len(seen) - 1], words=None
+            )
+            return iter([segment]), types.SimpleNamespace(language="sr", duration=10.0)
+
+        monkeypatch.setitem(
+            sys.modules, "ctranslate2", types.SimpleNamespace(set_random_seed=lambda _seed: None)
+        )
+        monkeypatch.setattr(
+            engine, "_load", lambda: types.SimpleNamespace(transcribe=transcribe), raising=False
+        )
+        monkeypatch.setattr(engine, "resolve_device", lambda: ("cpu", "int8"))
+        return seen
+
+    def test_an_echoing_decode_is_redone_without_the_prompt(self, monkeypatch) -> None:
+        engine = FasterWhisperEngine("large-v3", device="cpu")
+        seen = self.fake_faster_whisper(monkeypatch, engine, [self.ECHO, self.SPEECH])
+
+        # `nope.wav` does not exist, so the silence gate keeps every segment: what is under
+        # test is the retry, not the gate.
+        transcript = engine._decode(Path("nope.wav"), TranscribeOptions())
+
+        assert transcript.text == self.SPEECH, "the prompt-free decode is the one kept"
+        assert seen[0] and seen[1] is None, "the retry must not carry the prompt"
+        assert transcript.params["initial_prompt"] is False
+        assert "latinično pismo" in transcript.params["prompt_echo_retry"]
+
+    def test_a_clean_decode_keeps_the_prompt_and_decodes_once(self, monkeypatch) -> None:
+        """The cost of the fix on every run that never echoes has to be exactly zero."""
+        engine = FasterWhisperEngine("large-v3", device="cpu")
+        seen = self.fake_faster_whisper(monkeypatch, engine, [self.SPEECH])
+
+        transcript = engine._decode(Path("nope.wav"), TranscribeOptions())
+
+        assert transcript.text == self.SPEECH
+        assert seen == [TranscribeOptions().initial_prompt], "one decode, prompt attached"
+        assert transcript.params["initial_prompt"] is True
+        assert "prompt_echo_retry" not in transcript.params
+
+    def test_a_custom_prompt_is_the_one_checked_for(self, monkeypatch) -> None:
+        """The echo follows whatever `--prompt` put in, which is what proved the mechanism."""
+        engine = FasterWhisperEngine("large-v3", device="cpu")
+        custom = "Ovo je moj sopstveni pomoćni tekst"
+        seen = self.fake_faster_whisper(monkeypatch, engine, [custom, self.SPEECH])
+
+        transcript = engine._decode(Path("nope.wav"), TranscribeOptions(initial_prompt=custom))
+
+        assert transcript.text == self.SPEECH
+        assert seen == [custom, None]
+
+    def test_mlx_has_the_same_retry(self, monkeypatch, tmp_path) -> None:
+        """mlx-whisper carries `initial_prompt` into the first window too, so the hole is
+        identical there and it is the primary target's default engine. Driven on Linux
+        through a fake module, per non-negotiable 5."""
+        seen: list[str | None] = []
+        texts = [self.ECHO, self.SPEECH]
+
+        def transcribe(path, **kwargs):
+            seen.append(kwargs.get("initial_prompt"))
+            return {
+                "language": "sr",
+                "segments": [{"start": 0.0, "end": 5.0, "text": texts[len(seen) - 1]}],
+            }
+
+        monkeypatch.setitem(
+            sys.modules, "mlx_whisper", types.SimpleNamespace(transcribe=transcribe)
+        )
+        monkeypatch.setattr("subtitler.engines.mlx.models.local_path", lambda _spec: tmp_path)
+        monkeypatch.setattr(MlxWhisperEngine, "platform_supported", staticmethod(lambda: True))
+
+        transcript = MlxWhisperEngine("large-v3").transcribe(Path("nope.wav"), TranscribeOptions())
+
+        assert transcript.text == self.SPEECH
+        assert seen[0] and seen[1] is None
+        assert "latinično pismo" in transcript.params["prompt_echo_retry"]
+
+
 class TestMlxKwargFiltering:
     def test_keeps_only_accepted_names(self) -> None:
         def fake(audio, *, language=None, word_timestamps=False): ...

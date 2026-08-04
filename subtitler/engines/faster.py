@@ -22,6 +22,7 @@ from subtitler.engines.base import (
     TranscribeOptions,
     collapse_repetition,
     drop_silent_segments,
+    prompt_echoed,
 )
 from subtitler.model import Segment, Transcript, Word
 
@@ -313,8 +314,12 @@ class FasterWhisperEngine:
         Not a preference: `BatchedInferencePipeline` prepends `initial_prompt` to **every**
         window in the file, because `generate_segment_batched` passes it as
         `previous_tokens` for each batch element and there is no `prompt_reset_since` to
-        move past it. The sequential path resets that after the first 30-second window when
-        `condition_on_previous_text` is off, which is why only batched decoding is affected.
+        move past it. The sequential path does move past it, but only *after* the first
+        30-second window: `generate_segments` seeds `all_tokens` with the prompt and raises
+        `prompt_reset_since` to `len(all_tokens)` at the end of the first iteration when
+        `condition_on_previous_text` is off. So window one is exposed on both paths, and
+        this dropping the prompt unconditionally is not what protects the sequential one.
+        `_decode` handles the exposure that is left; see the echo retry there.
 
         Measured on a 54-minute Serbian episode: batch 16 with the prompt attached echoed
         "Zadrži srpski jezik i latinično pismo..." back as transcript text over and over and
@@ -325,6 +330,22 @@ class FasterWhisperEngine:
         return None if batch_size else opts.initial_prompt
 
     def _decode(self, audio: Path, opts: TranscribeOptions) -> Transcript:
+        """Decode, and decode a second time without the prompt if the first echoed it.
+
+        The prompt is only ever in play for the first 30-second window (see `_prompt_for`),
+        which is harmless while that window holds speech and is the whole transcript when
+        the clip is shorter than one window. The first 10 seconds of a YouTube episode,
+        titles and music and no speech at all, came back as the single cue "Zadrži srpski
+        jezik i latinično pismo." with word confidences of 0.02 to 0.11; a different
+        `--prompt` produced that prompt instead, which is the mechanism admitting to itself.
+
+        The trigger is the echo, not the duration. A duration threshold would leave the
+        long-file half of this bug (`--denoise arnndn` on `uvod-u-pravo.m4a`, where the
+        echo replaced the opening of a 164-second lecture) unfixed while taking the
+        steering away from every legitimate short clip, and mean word confidence fires on
+        merely difficult audio too. The one prompt-free retry cannot echo again, costs
+        nothing on the runs that never echo, and keeps the prompt everywhere it works.
+        """
         # Checked before anything is imported or loaded, so the message arrives instead of
         # "No clip timestamps found" from deep inside faster-whisper's batched generator,
         # which has nothing to chunk on when the VAD is off.
@@ -334,6 +355,19 @@ class FasterWhisperEngine:
                 "use --batch-size 0 to decode sequentially without it"
             )
 
+        prompt = self._prompt_for(opts, self.effective_batch_size())
+        transcript = self._decode_with(audio, opts, prompt)
+        echo_n, echo_text = prompt_echoed(transcript.text, prompt)
+        if not echo_n:
+            return transcript
+
+        transcript = self._decode_with(audio, opts, None)
+        # Recorded rather than logged: an engine has no log channel, and the pipeline reads
+        # this back out of `transcript.json` so a cached run reports it too.
+        transcript.params["prompt_echo_retry"] = echo_text
+        return transcript
+
+    def _decode_with(self, audio: Path, opts: TranscribeOptions, prompt: str | None) -> Transcript:
         import ctranslate2
 
         # A fixed seed does not make CTranslate2 bit-deterministic, but it removes one
@@ -353,7 +387,7 @@ class FasterWhisperEngine:
         segments_iter, info = runner.transcribe(
             str(audio),
             language=None if opts.language == "auto" else opts.language,
-            initial_prompt=self._prompt_for(opts, batch_size),
+            initial_prompt=prompt,
             beam_size=opts.beam_size,
             temperature=opts.temperature,
             word_timestamps=opts.word_timestamps,
@@ -416,9 +450,10 @@ class FasterWhisperEngine:
                 "device": device,
                 "compute_type": compute_type,
                 "batch_size": batch_size,
-                # Recorded because it is the one option the engine overrides on its own:
-                # a transcript decoded in batches was never steered by the prompt.
-                "initial_prompt": bool(self._prompt_for(opts, batch_size)),
+                # Recorded because it is the one option the engine overrides on its own: a
+                # transcript decoded in batches, or re-decoded after an echo, was never
+                # steered by the prompt.
+                "initial_prompt": bool(prompt),
                 "cuda_fallback": self._fallback_reason,
                 "seed": opts.seed,
                 "repetition_collapsed": collapsed,

@@ -812,9 +812,13 @@ function showResult(result) {
   if (result.video) files.push(result.video);
   if (result.muxed) files.push(result.muxed);
   const lint = result.lint_violations || [];
+  // Above the count, not beside the lint note: a warning says the text may not be what
+  // anybody said, which the reader has to see before "3 subtitles" convinces them.
+  const warnings = result.warnings || [];
   const label = state.options.reveal_label;
   const dir = result.out_dir || "";
   $("result-body").innerHTML = `
+    ${warnings.map(w => `<div class="msg warn">${esc(w)}</div>`).join("")}
     <p><strong>${result.cue_count} subtitles</strong> from ${esc(result.engine)} in ${result.elapsed_s}s.</p>
     <pre class="cmd">${files.map(esc).join("\n") || "nothing written (dry run)"}</pre>
     <div class="row" style="margin-top:12px">

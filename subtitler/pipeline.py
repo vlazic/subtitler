@@ -31,7 +31,7 @@ from subtitler import fetch as fetch_mod
 from subtitler import media, postedit, render
 from subtitler.cues import CueConfig, lint_cues, segments_to_cues
 from subtitler.engines import resolve
-from subtitler.engines.base import TranscribeOptions
+from subtitler.engines.base import TranscribeOptions, prompt_echoed
 from subtitler.model import (
     Cue,
     Transcript,
@@ -114,6 +114,10 @@ class RunResult:
     transcript: Transcript | None = None
     cues: tuple[Cue, ...] = ()
     lint: list[str] = field(default_factory=list)
+    # Things that went wrong without failing the run, in the order they were noticed. A
+    # `lint` entry says a cue is hard to read; a warning here says the text may not be what
+    # anybody said, which is not a cue-quality note and must not be reported as one.
+    warnings: list[str] = field(default_factory=list)
     engine: str = ""
     cached: tuple[str, ...] = ()
     fix: dict[str, Any] | None = None
@@ -135,6 +139,7 @@ class RunResult:
             "engine": self.engine,
             "cue_count": len(self.cues),
             "lint_violations": self.lint,
+            "warnings": self.warnings,
             "cached_stages": list(self.cached),
             "fix": self.fix,
             "edits": self.edits,
@@ -281,6 +286,7 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
         )
 
     transcript, transcribe_key = _transcribe(cfg, cache, engine, opts, audio_wav, audio_key, log)
+    warnings = _prompt_echo_warnings(transcript, opts, log)
     cues, cues_key = _cues(cfg, cache, transcript, transcribe_key, log)
 
     fix_report: dict[str, Any] | None = None
@@ -308,6 +314,7 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
         transcript=transcript,
         cues=cues,
         lint=problems,
+        warnings=warnings,
         engine=engine.name,
         fix=fix_report,
         cues_key=review_key,
@@ -584,6 +591,35 @@ def _transcribe(
         f"{transcript.runtime_s:.1f}s (rtf {transcript.rtf:.2f})"
     )
     return transcript, entry.key
+
+
+def _prompt_echo_warnings(transcript: Transcript, opts: TranscribeOptions, log: Any) -> list[str]:
+    """Say so when the transcript is the steering prompt rather than the speech.
+
+    Without this a run that produced nothing but "Zadrži srpski jezik i latinično pismo."
+    reported one cue, `lint_violations: []` and success, which is confident-looking garbage:
+    the text is well-formed Serbian of a readable length, so nothing downstream objects to
+    it. Checked in the pipeline and not in the engine so that every backend is covered
+    (the cloud ones send the prompt too and have no retry), and against the transcript that
+    is actually being used, including one served from the cache.
+    """
+    notes: list[str] = []
+    retried = transcript.params.get("prompt_echo_retry")
+    if retried:
+        notes.append(
+            f"the first decode returned the steering prompt as transcript text ({retried!r}); "
+            "it was decoded again without the prompt, so this transcript is unsteered"
+        )
+    echo_n, echo_text = prompt_echoed(transcript.text, opts.initial_prompt)
+    if echo_n:
+        notes.append(
+            f"this transcript still contains {echo_n} words of the steering prompt "
+            f"({echo_text!r}). Check it against the audio: the clip may hold no speech, and "
+            "`--prompt ''` decodes it without any prompt to echo"
+        )
+    for note in notes:
+        log(f"warning: {note}")
+    return notes
 
 
 def _cues(

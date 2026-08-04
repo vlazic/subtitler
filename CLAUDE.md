@@ -126,12 +126,19 @@ primary target**, Linux is the development platform.
   alone, so asking for cuda by name handed CTranslate2 an unprepared loader and died with
   `libcublas.so.12 is not found` at the first decoded window, on a box where `doctor` had
   just reported CUDA usable. `_load()` preloads whenever the resolved device is cuda.
-- **A denoiser can make Whisper echo the steering prompt.** `--denoise arnndn` on
-  `fixtures/uvod-u-pravo.m4a` opens with the tail of `SERBIAN_PROMPT` in place of the first
-  fifty words of the lecture, on the **sequential** path, where the documented batched-decoding
-  cause does not apply. Only faster-whisper; both Groq models handled the same denoised WAV.
-  `bench/metrics.prompt_echo` exists to catch it, because nothing else does: the text repeats
-  nothing, has no filler word in it and reads like Serbian.
+- **The steering prompt is exposed on the first 30-second window of every decode, on both
+  paths.** `generate_segments` seeds `all_tokens` with `initial_prompt` and only raises
+  `prompt_reset_since` past it at the *end* of the first window, so "the sequential path
+  resets it" was never protection for window one. Two sightings: `--denoise arnndn` on
+  `fixtures/uvod-u-pravo.m4a` replaced the first fifty words of the lecture with the tail
+  of `SERBIAN_PROMPT`, and a 10-second YouTube fragment of titles and music came back as
+  nothing but `Zadrži srpski jezik i latinično pismo.` because there was no second window
+  to reset into. Both engines now decode once more without the prompt when
+  `bench/metrics.prompt_echo` fires on the result, and the pipeline warns either way. Do
+  not swap that trigger for a duration threshold: it would miss the long-file sighting and
+  strip the steering from every legitimate short clip.
+  `bench/metrics.prompt_echo` is the one detector for this, because nothing else notices:
+  the text repeats nothing, has no filler word in it and reads like Serbian.
 - **A key pool needs every key tried, not one drawn at random.** `groq.py` used
   `random.choice` per attempt and gave up on the first non-retryable error, so one restricted
   key out of two failed a different random half of the benchmark's cloud cells on every run.
