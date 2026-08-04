@@ -186,6 +186,10 @@ def resolve_clips(spec: str | None, *, root: Path) -> tuple[Path, ...]:
     `benchmarks/clips/` is empty in a fresh checkout because the interesting clips are too
     large to commit, so an unpopulated directory falls back to the two checked-in fixtures
     rather than reporting an empty matrix.
+
+    A clip inside the repository is named relative to it. `results.json` is a committed
+    artifact, and `fixtures/gozba-sample.mp3` means the same thing in someone else's
+    checkout while `/home/someone/Projects/.../fixtures/gozba-sample.mp3` does not.
     """
     if spec:
         candidates = [Path(p.strip()) for p in spec.split(",") if p.strip()]
@@ -193,23 +197,33 @@ def resolve_clips(spec: str | None, *, root: Path) -> tuple[Path, ...]:
             found = _media_in(candidates[0])
             if not found:
                 raise ValueError(f"no media files in {candidates[0]}")
-            return found
+            return _relative_to(found, root)
         missing = [str(p) for p in candidates if not p.exists()]
         if missing:
             raise ValueError(f"clip not found: {', '.join(missing)}")
-        return tuple(candidates)
+        return _relative_to(tuple(candidates), root)
 
     default_dir = root / "benchmarks" / "clips"
     found = _media_in(default_dir) if default_dir.is_dir() else ()
     if found:
-        return found
-    return tuple(root / p for p in DEFAULT_CLIPS)
+        return _relative_to(found, root)
+    return _relative_to(tuple(root / p for p in DEFAULT_CLIPS), root)
 
 
 def _media_in(directory: Path) -> tuple[Path, ...]:
     return tuple(
         sorted(p for p in directory.iterdir() if p.is_file() and p.suffix.lower() in MEDIA_SUFFIXES)
     )
+
+
+def _relative_to(paths: Sequence[Path], root: Path) -> tuple[Path, ...]:
+    out = []
+    for path in paths:
+        try:
+            out.append(path.resolve().relative_to(root.resolve()))
+        except ValueError:  # outside the repository: an absolute path is the only honest one
+            out.append(path)
+    return tuple(out)
 
 
 def load_reference(clip_id: str, references: Path) -> str | None:

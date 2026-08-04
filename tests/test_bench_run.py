@@ -116,18 +116,32 @@ class TestResolveClips:
     def test_an_explicit_file(self, tmp_path):
         clip = tmp_path / "one.mp3"
         clip.write_bytes(b"x")
-        assert bench.resolve_clips(str(clip), root=tmp_path) == (clip,)
+        assert bench.resolve_clips(str(clip), root=tmp_path) == (Path("one.mp3"),)
+
+    def test_a_clip_inside_the_repository_is_named_relative_to_it(self, tmp_path):
+        """results.json is committed, and an absolute path in it means nothing elsewhere."""
+        (tmp_path / "fixtures").mkdir()
+        clip = tmp_path / "fixtures" / "one.mp3"
+        clip.write_bytes(b"x")
+        assert bench.resolve_clips(str(clip), root=tmp_path) == (Path("fixtures/one.mp3"),)
+
+    def test_a_clip_outside_the_repository_keeps_its_absolute_path(self, tmp_path):
+        outside = tmp_path / "elsewhere"
+        outside.mkdir()
+        clip = outside / "one.mp3"
+        clip.write_bytes(b"x")
+        assert bench.resolve_clips(str(clip), root=tmp_path / "repo") == (clip,)
 
     def test_a_comma_separated_list(self, tmp_path):
         a, b = tmp_path / "a.mp3", tmp_path / "b.m4a"
         a.write_bytes(b"x")
         b.write_bytes(b"x")
-        assert bench.resolve_clips(f"{a},{b}", root=tmp_path) == (a, b)
+        assert bench.resolve_clips(f"{a},{b}", root=tmp_path) == (Path("a.mp3"), Path("b.m4a"))
 
     def test_a_directory_takes_the_media_in_it(self, tmp_path):
         (tmp_path / "a.mp3").write_bytes(b"x")
         (tmp_path / "notes.txt").write_text("not media")
-        assert bench.resolve_clips(str(tmp_path), root=tmp_path) == (tmp_path / "a.mp3",)
+        assert bench.resolve_clips(str(tmp_path), root=tmp_path) == (Path("a.mp3"),)
 
     def test_an_empty_clips_directory_falls_back_to_the_fixtures(self, tmp_path):
         """A fresh checkout has no clips: the interesting ones are too big to commit."""
