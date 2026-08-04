@@ -1,0 +1,328 @@
+"""Routing and JSON, with no socket anywhere in it.
+
+`GuiApp.handle()` is a function from (method, path, query, body) to a `Response`, so the
+whole API is exercised in tests by calling it, and `server.py` is left with nothing but
+bytes on a wire. Every effect the app can have on the machine arrives as an argument:
+
+    runner    the pipeline (default `pipeline.run_pipeline`)
+    spawn     how a job gets a worker (default a daemon thread)
+    opener    how a folder gets shown to the user (default `subprocess.Popen`)
+    plat      what machine this is (default `doctor.detect_platform()`)
+
+so a test can drive a complete run, a doctor report and a Finder reveal without a display,
+a GPU, or a Mac.
+"""
+
+from __future__ import annotations
+
+import json
+import mimetypes
+import subprocess
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from subtitler import __version__, doctor, models
+from subtitler.gui import files, forms, jobs
+from subtitler.gui.jobs import JobManager
+from subtitler.pipeline import run_pipeline
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+Opener = Callable[[Sequence[str]], None]
+
+
+@dataclass(frozen=True, slots=True)
+class Response:
+    status: int
+    body: bytes
+    content_type: str = "application/json; charset=utf-8"
+
+
+def _json(payload: Any, status: int = 200) -> Response:
+    body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+    return Response(status, body)
+
+
+def _error(message: str, status: int = 400, **extra: Any) -> Response:
+    return _json({"error": message, **extra}, status)
+
+
+def _default_opener(argv: Sequence[str]) -> None:
+    subprocess.Popen(list(argv), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+class GuiApp:
+    def __init__(
+        self,
+        *,
+        token: str = "",
+        plat: doctor.Platform | None = None,
+        home: Path | None = None,
+        runner: Callable[..., Any] | None = None,
+        spawn: jobs.Spawn | None = None,
+        opener: Opener | None = None,
+        diagnose: Callable[[doctor.Platform], list[doctor.DepStatus]] | None = None,
+    ) -> None:
+        self.token = token
+        self.plat = plat or doctor.detect_platform()
+        self.home = home or Path.home()
+        self._runner = runner or run_pipeline
+        self._spawn = spawn or jobs.thread_spawn
+        self._opener = opener or _default_opener
+        self._diagnose = diagnose or (lambda p: doctor.diagnose(p))
+        self.jobs = JobManager(spawn=self._spawn)
+        self._doctor_report: dict[str, Any] | None = None
+        self._doctor_running = False
+
+    # ---------------------------------------------------------------- dispatch
+
+    def handle(
+        self,
+        method: str,
+        path: str,
+        query: Mapping[str, str] | None = None,
+        body: bytes = b"",
+        *,
+        token: str | None = None,
+    ) -> Response:
+        query = query or {}
+
+        if not path.startswith("/api/"):
+            return self._static(path)
+
+        # The server binds to loopback, but "only this machine" is not "only this user's
+        # browser": any page the user visits can POST to 127.0.0.1. The token is handed to
+        # the page in the URL that was opened for it and required on every API call, so a
+        # drive-by request cannot list the home directory or start a run.
+        if self.token and token != self.token:
+            return _error("bad or missing token; reopen the link subtitler printed", 403)
+
+        route = (method.upper(), path)
+        if route == ("GET", "/api/options"):
+            return self._options()
+        if route == ("GET", "/api/files"):
+            return self._files(query)
+        if route == ("GET", "/api/doctor"):
+            return self._doctor(query)
+        if route == ("GET", "/api/models"):
+            return self._models()
+        if route == ("POST", "/api/models/download"):
+            return self._download(_body(body))
+        if route == ("POST", "/api/run"):
+            return self._run(_body(body))
+        if route == ("POST", "/api/preview"):
+            return self._preview(_body(body))
+        if route == ("GET", "/api/job"):
+            return self._job(query)
+        if route == ("POST", "/api/reveal"):
+            return self._reveal(_body(body))
+        return _error(f"no route for {method} {path}", 404)
+
+    # ---------------------------------------------------------------- static
+
+    def _static(self, path: str) -> Response:
+        name = "index.html" if path in {"", "/", "/index.html"} else path.lstrip("/")
+        target = (STATIC_DIR / name).resolve()
+        if not target.is_file() or STATIC_DIR not in target.parents:
+            return Response(404, b"not found", "text/plain; charset=utf-8")
+        kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        if kind.startswith("text/") or kind.endswith("javascript"):
+            kind += "; charset=utf-8"
+        return Response(200, target.read_bytes(), kind)
+
+    # ---------------------------------------------------------------- routes
+
+    def _options(self) -> Response:
+        payload = forms.options()
+        payload.update(
+            version=__version__,
+            platform={
+                "system": self.plat.system,
+                "machine": self.plat.machine,
+                "label": self.plat.describe(),
+                "is_macos": self.plat.is_macos,
+                "apple_silicon": self.plat.is_apple_silicon,
+            },
+            home=str(self.home),
+            places=[p.to_dict() for p in files.places(self.plat, self.home)],
+            reveal_label="Show in Finder" if self.plat.is_macos else "Open folder",
+        )
+        return _json(payload)
+
+    def _files(self, query: Mapping[str, str]) -> Response:
+        raw = query.get("path") or str(self.home)
+        try:
+            listing = files.list_dir(
+                Path(raw),
+                media_only=query.get("all") not in {"1", "true"},
+                show_hidden=query.get("hidden") in {"1", "true"},
+            )
+        except (NotADirectoryError, PermissionError, OSError) as exc:
+            return _error(str(exc), 400)
+        return _json(listing)
+
+    def _doctor(self, query: Mapping[str, str]) -> Response:
+        """Kicked off in the background, because it shells out a dozen times.
+
+        The whole point of putting `doctor` in the window is the user who will not run a
+        terminal command to find out their ffmpeg has no libass. Blocking the first paint
+        for several seconds to tell them so would trade one annoyance for another.
+        """
+        if query.get("refresh") in {"1", "true"}:
+            self._doctor_report = None
+        if self._doctor_report is None and not self._doctor_running:
+            self._doctor_running = True
+            self._spawn(self._refresh_doctor)
+        # Re-read after spawning rather than before: an inline `spawn` (which is how the
+        # tests run) has already finished by this point, and answering "not ready" to a
+        # report that is sitting right there would make the page wait for nothing.
+        if self._doctor_report is not None:
+            return _json({"ready": True, **self._doctor_report})
+        return _json({"ready": False})
+
+    def _refresh_doctor(self) -> None:
+        try:
+            statuses = self._diagnose(self.plat)
+            self._doctor_report = {
+                "platform": self.plat.describe(),
+                "text": doctor.render(statuses, self.plat),
+                "deps": [s.to_dict() for s in statuses],
+                "blocking": [s.dep.key for s in statuses if s.blocking],
+            }
+        except Exception as exc:  # a broken check must not wedge the panel
+            self._doctor_report = {
+                "platform": self.plat.describe(),
+                "text": f"the dependency check itself failed: {exc}",
+                "deps": [],
+                "blocking": [],
+            }
+        finally:
+            self._doctor_running = False
+
+    def _models(self) -> Response:
+        """What weights this machine would use, and whether they are on disk.
+
+        `EngineUnavailable` says "the large-v3 weights are not downloaded" and names a
+        terminal command, which is a dead end for this audience. The page offers the
+        download instead, through `models.download`'s progress callback.
+        """
+        backend = "mlx" if self.plat.is_apple_silicon else "faster-whisper"
+        specs = []
+        for spec in models.specs_for_backend(backend):
+            path = models.local_path(spec)
+            specs.append(
+                {
+                    "name": spec.name,
+                    "backend": spec.backend,
+                    "size": spec.size_label,
+                    "cached": path is not None,
+                    "path": str(path) if path else None,
+                }
+            )
+        return _json({"backend": backend, "cache_root": str(models.cache_root()), "models": specs})
+
+    def _download(self, payload: Mapping[str, Any]) -> Response:
+        backend = str(payload.get("backend") or "").strip() or (
+            "mlx" if self.plat.is_apple_silicon else "faster-whisper"
+        )
+        name = str(payload.get("name") or "large-v3").strip()
+        try:
+            spec = models.resolve(name, backend)
+        except models.ModelNotFound as exc:
+            return _error(str(exc), 400)
+
+        def work(log: jobs.Log) -> dict[str, Any]:
+            path = models.download(spec, progress=log)
+            return {"name": spec.name, "backend": spec.backend, "path": str(path)}
+
+        return self._start("download", f"downloading {spec.key} ({spec.size_label})", work)
+
+    def _preview(self, payload: Mapping[str, Any]) -> Response:
+        """Validate the form and echo the command line, without starting anything."""
+        try:
+            cfg = forms.build_config(payload)
+        except forms.FormError as exc:
+            return _json({"ok": False, **exc.to_dict()})
+        return _json({"ok": True, "command": forms.command_line(cfg), "argv": forms.to_argv(cfg)})
+
+    def _run(self, payload: Mapping[str, Any]) -> Response:
+        try:
+            cfg = forms.build_config(payload)
+        except forms.FormError as exc:
+            return _json({"ok": False, **exc.to_dict()}, 400)
+
+        runner = self._runner
+        command = forms.command_line(cfg)
+        out_dir = str((cfg.out_dir or cfg.input.parent).expanduser())
+
+        def work(log: jobs.Log) -> dict[str, Any]:
+            log(f"$ {command}")
+            result = runner(cfg, log=log)
+            summary = result.to_dict()
+            summary["out_dir"] = str(
+                Path(summary["srt"]).parent if summary.get("srt") else Path(out_dir)
+            )
+            return summary
+
+        return self._start(
+            "run",
+            cfg.input.name,
+            work,
+            stages=forms.stages_for(cfg),
+            command=command,
+            out_dir=out_dir,
+        )
+
+    def _start(
+        self,
+        kind: str,
+        label: str,
+        work: jobs.Work,
+        *,
+        stages: tuple[str, ...] = jobs.STAGES,
+        **extra: Any,
+    ) -> Response:
+        try:
+            job = self.jobs.start(kind, label, work, stages=stages)
+        except jobs.Busy as exc:
+            return _error(str(exc), 409)
+        snapshot = job.snapshot(0, now=job.started)
+        return _json({"ok": True, **snapshot, **extra})
+
+    def _job(self, query: Mapping[str, str]) -> Response:
+        try:
+            since = int(query.get("since", "0"))
+        except ValueError:
+            since = 0
+        snapshot = self.jobs.snapshot(query.get("id") or None, since)
+        if snapshot is None:
+            return _error("no such job", 404)
+        return _json(snapshot)
+
+    def _reveal(self, payload: Mapping[str, Any]) -> Response:
+        raw = str(payload.get("path") or "").strip()
+        if not raw:
+            return _error("nothing to show", 400)
+        target = Path(raw).expanduser()
+        if not target.exists():
+            return _error(f"no such path: {target}", 400)
+        argv = files.reveal_command(self.plat, target, is_dir=target.is_dir())
+        try:
+            self._opener(argv)
+        except OSError as exc:
+            # xdg-open is not installed on every Linux box, and a failure to open a folder
+            # must not read like a failure of the run that produced it.
+            return _error(f"could not open the file manager ({exc}); the folder is {target}", 500)
+        return _json({"ok": True, "argv": list(argv)})
+
+
+def _body(raw: bytes) -> dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}

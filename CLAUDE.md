@@ -50,6 +50,7 @@ primary target**, Linux is the development platform.
 | `subtitler/burn.py` | `.ass` generation and the three ffmpeg burn commands |
 | `subtitler/postedit.py` | optional LiteLLM correction pass |
 | `subtitler/doctor.py` | dependency detection and install |
+| `subtitler/gui/` | the browser UI: `forms` (pure), `files`, `jobs`, `app`, `server` |
 | `subtitler/bench/` | benchmark matrix, Serbian normalization, metrics, report |
 
 ## Gotchas that cost time before
@@ -105,5 +106,17 @@ primary target**, Linux is the development platform.
   clitic "se" at the start of a line, which is the exact break `cues.CLITICS` forbids. A
   cue whose text came back unchanged keeps its original break: the splitter chose it from
   real word timings, and nothing downstream can do better.
+- **The GUI is a local web page, not tkinter, and non-negotiable 6 is why.** Tk is a
+  property of the *interpreter build*: python.org and uv-managed builds ship it, Homebrew's
+  `python@3.12` does not pull `python-tk`, and the failure is an `ImportError` about
+  `_tkinter` in front of the least technical user this project has. Neither CI runner has a
+  display and macOS has no Xvfb, so a Tk window could not be exercised on the primary
+  target at all. `http.server` plus `webbrowser` is in every build and every route is
+  driven by real HTTP on both runners.
+- **`--device cuda` used to skip the CUDA preload.** `resolve_device()` reaches
+  `preload_cuda_libraries()` only through `_cuda_usable()`, which it consults on `auto`
+  alone, so asking for cuda by name handed CTranslate2 an unprepared loader and died with
+  `libcublas.so.12 is not found` at the first decoded window, on a box where `doctor` had
+  just reported CUDA usable. `_load()` preloads whenever the resolved device is cuda.
 - `<b>` and `<i>` are markup, not width. `cues.display_len` is what `lint` measures, so
   `--fix-markup html` does not report violations on lines that read fine.

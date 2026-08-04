@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>subtitler</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f7;
+  --panel: #ffffff;
+  --line: #e2e2e6;
+  --text: #17171a;
+  --muted: #6a6a73;
+  --accent: #2f6feb;
+  --accent-text: #ffffff;
+  --ok: #17803d;
+  --warn: #a36200;
+  --bad: #c1332b;
+  --code: #f1f1f4;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17171a;
+    --panel: #1f1f24;
+    --line: #33333b;
+    --text: #ececed;
+    --muted: #9a9aa5;
+    --accent: #4c8dff;
+    --ok: #4ec97a;
+    --warn: #e0a437;
+    --bad: #ff7b70;
+    --code: #101014;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 24px 20px 140px; }
+header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--muted); font-size: 13px; }
+header .spacer { flex: 1; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.card > h2 {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); margin: 0 0 12px;
+}
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+label.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+label.field > span.hint { font-size: 11px; color: var(--muted); opacity: 0.8; }
+input[type=text], input[type=number], select, textarea {
+  font: inherit; font-size: 14px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%;
+}
+textarea { min-height: 76px; resize: vertical; font-size: 13px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+button {
+  font: inherit; font-size: 14px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--text); padding: 7px 13px; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+button.big { padding: 11px 22px; font-size: 15px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
+.check input { width: auto; }
+
+.filebox {
+  display: flex; gap: 12px; align-items: center; padding: 12px;
+  border: 1px dashed var(--line); border-radius: var(--radius); background: var(--bg);
+}
+.filebox .name { font-weight: 600; }
+.filebox .path { color: var(--muted); font-size: 12px; word-break: break-all; }
+.filebox .grow { flex: 1; min-width: 0; }
+
+code, pre, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+pre.cmd {
+  background: var(--code); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; font-size: 12px; white-space: pre-wrap; word-break: break-all; margin: 0;
+}
+pre.log {
+  background: var(--code); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; font-size: 12px; margin: 0; max-height: 320px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+.stages { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 12px; }
+.stage {
+  font-size: 11px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); background: var(--bg);
+}
+.stage.done { color: var(--ok); border-color: var(--ok); }
+.stage.active { color: var(--accent-text); background: var(--accent); border-color: transparent; font-weight: 600; }
+
+.pill { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); }
+.pill.ok { color: var(--ok); border-color: var(--ok); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.pill.bad { color: var(--bad); border-color: var(--bad); }
+
+.msg { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }
+.msg.bad { background: color-mix(in srgb, var(--bad) 14%, transparent); border: 1px solid var(--bad); }
+.msg.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); border: 1px solid var(--warn); }
+.msg.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); border: 1px solid var(--ok); }
+
+details.adv > summary { cursor: pointer; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+details.adv[open] > summary { margin-bottom: 12px; }
+.subhead { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 16px 0 8px; }
+
+.footer {
+  position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel);
+  border-top: 1px solid var(--line); padding: 12px 20px;
+}
+.footer .inner { max-width: 880px; margin: 0 auto; display: flex; gap: 12px; align-items: center; }
+.footer .status { flex: 1; color: var(--muted); font-size: 13px; }
+
+dialog {
+  border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text);
+  padding: 0; width: min(760px, 94vw); max-height: 86vh;
+}
+dialog::backdrop { background: rgba(0,0,0,0.45); }
+.dlg-head { display: flex; gap: 10px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.dlg-body { display: flex; min-height: 380px; max-height: 60vh; }
+.dlg-side { width: 170px; border-right: 1px solid var(--line); padding: 8px; overflow: auto; }
+.dlg-list { flex: 1; overflow: auto; padding: 6px; }
+.dlg-foot { padding: 10px 16px; border-top: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+.item {
+  display: flex; gap: 9px; align-items: center; width: 100%; text-align: left;
+  border: 0; background: transparent; border-radius: 6px; padding: 6px 9px; font-size: 14px;
+}
+.item:hover { background: var(--bg); }
+.item.sel { background: var(--accent); color: var(--accent-text); }
+.item .sz { margin-left: auto; font-size: 11px; color: var(--muted); }
+.item.sel .sz { color: var(--accent-text); }
+.crumbs { font-size: 12px; color: var(--muted); word-break: break-all; }
+
+table.deps { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.deps td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.deps td.st { width: 46px; font-weight: 600; font-size: 11px; text-transform: uppercase; }
+table.deps td.fix { color: var(--muted); font-size: 12px; }
+.hide { display: none !important; }
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>subtitler</h1>
+  <span class="sub" id="version"></span>
+  <span class="spacer"></span>
+  <span class="pill" id="doctor-pill">checking dependencies...</span>
+  <button id="doctor-open">Check my computer</button>
+</header>
+
+<div id="banner"></div>
+
+<section class="card">
+  <h2>1. The file to subtitle</h2>
+  <div class="filebox">
+    <div class="grow">
+      <div class="name" id="input-name">No file chosen yet</div>
+      <div class="path" id="input-path">Pick an audio or video file from your computer.</div>
+    </div>
+    <button class="primary" id="pick-input">Choose a file</button>
+  </div>
+</section>
+
+<section class="card">
+  <h2>2. What to make, and where</h2>
+  <div class="grid">
+    <label class="field">What to produce
+      <select id="output-kind">
+        <option value="burn">Video with the subtitles burned in, plus .srt and .vtt</option>
+        <option value="srt">Subtitle files only (.srt and .vtt), no video work</option>
+      </select>
+    </label>
+    <label class="field">Subtitle look
+      <select id="style_preset"></select>
+      <span class="hint">outline reads on anything, box on busy footage</span>
+    </label>
+  </div>
+  <div class="filebox" style="margin-top:12px">
+    <div class="grow">
+      <div class="name">Save into</div>
+      <div class="path" id="out-path">the same folder as the input file</div>
+    </div>
+    <button id="pick-out">Choose a folder</button>
+    <button id="clear-out">Reset</button>
+  </div>
+  <label class="check" style="margin-top:10px">
+    <input type="checkbox" id="soft_mux"> Also add a switchable subtitle track to the video
+  </label>
+</section>
+
+<section class="card">
+  <h2>3. Transcription</h2>
+  <div class="grid">
+    <label class="field">Engine
+      <select id="engine"></select>
+    </label>
+    <label class="field">Model
+      <input type="text" id="model" value="large-v3">
+      <span class="hint" id="model-hint"></span>
+    </label>
+    <label class="field">Processor
+      <select id="device"></select>
+    </label>
+    <label class="field">Language
+      <select id="lang-select"></select>
+      <span class="hint">pinned on purpose: Whisper mistakes Serbian for Croatian</span>
+    </label>
+    <label class="field">Clean up the audio first
+      <select id="denoise"></select>
+    </label>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button id="model-download" class="hide">Download the model</button>
+    <span class="sub" id="model-status"></span>
+  </div>
+</section>
+
+<section class="card">
+  <h2>4. How the subtitles are shaped</h2>
+  <div class="grid">
+    <label class="field">Characters per line<input type="number" id="max_line" min="10" max="120"></label>
+    <label class="field">Lines per subtitle<input type="number" id="max_lines" min="1" max="4"></label>
+    <label class="field">Shortest subtitle (s)<input type="number" id="min_dur" step="0.1" min="0.1"></label>
+    <label class="field">Longest subtitle (s)<input type="number" id="max_dur" step="0.1" min="0.2"></label>
+    <label class="field">Reading speed (chars/s)<input type="number" id="max_cps" step="0.5" min="1"></label>
+  </div>
+</section>
+
+<section class="card">
+  <details class="adv">
+    <summary>Everything else</summary>
+
+    <div class="grid">
+      <label class="field">Canvas for audio-only input<input type="text" id="canvas"></label>
+      <label class="field">Canvas colour<input type="text" id="canvas_color"></label>
+      <label class="field">Font family (blank = bundled)<input type="text" id="font"></label>
+      <label class="field">Font size (blank = automatic)<input type="number" id="font_size" min="0" max="400"></label>
+      <label class="field">Batch size (NVIDIA only)
+        <input type="number" id="batch_size" min="0" max="64">
+        <span class="hint">faster, but drops the steering prompt</span>
+      </label>
+      <label class="field">Redo from stage
+        <select id="force"></select>
+        <span class="hint">ignores the cache from there onwards</span>
+      </label>
+    </div>
+
+    <label class="field" style="margin-top:12px">Steering prompt (blank = the built-in Serbian one)
+      <textarea id="prompt" placeholder="leave empty unless you know why you are changing it"></textarea>
+    </label>
+
+    <div class="subhead">Optional LLM correction pass</div>
+    <label class="check"><input type="checkbox" id="fix"> Send the finished cues to a language model to fix spelling and punctuation</label>
+    <div class="grid" id="fix-fields" style="margin-top:10px">
+      <label class="field">Model<input type="text" id="fix_model"></label>
+      <label class="field">Prompt<input type="text" id="fix_prompt"></label>
+      <label class="field">Cues per request<input type="number" id="fix_batch" min="1" max="500"></label>
+      <label class="field">Parallel requests<input type="number" id="fix_workers" min="1" max="32"></label>
+      <label class="field">Temperature (blank = unset)<input type="text" id="fix_temperature" placeholder=""></label>
+      <label class="field">Markdown the model emits<select id="fix_markup"></select></label>
+    </div>
+    <div class="filebox hide" id="phrases-box" style="margin-top:10px">
+      <div class="grow">
+        <div class="name">Drop cues containing these phrases</div>
+        <div class="path" id="phrases-path">no file chosen</div>
+      </div>
+      <button id="pick-phrases">Choose a file</button>
+      <button id="clear-phrases">Clear</button>
+    </div>
+
+    <div class="subhead">Diagnostics</div>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="dry_run"> Dry run: print the ffmpeg commands, transcribe nothing</label>
+      <label class="check"><input type="checkbox" id="verbose"> Extra detail in the log</label>
+    </div>
+  </details>
+</section>
+
+<section class="card">
+  <h2>The same thing on the command line</h2>
+  <pre class="cmd" id="command">subtitler run</pre>
+</section>
+
+<section class="card hide" id="progress-card">
+  <h2>Progress</h2>
+  <div class="stages" id="stages"></div>
+  <div class="row" style="margin-bottom:10px">
+    <strong id="job-label"></strong>
+    <span class="sub" id="job-elapsed"></span>
+  </div>
+  <pre class="log" id="log"></pre>
+</section>
+
+<section class="card hide" id="result-card">
+  <h2>Result</h2>
+  <div id="result-body"></div>
+</section>
+
+</div>
+
+<div class="footer">
+  <div class="inner">
+    <span class="status" id="status">Choose a file to begin.</span>
+    <button class="primary big" id="start" disabled>Start</button>
+  </div>
+</div>
+
+<dialog id="picker">
+  <div class="dlg-head">
+    <strong id="picker-title">Choose a file</strong>
+    <span class="spacer" style="flex:1"></span>
+    <label class="check"><input type="checkbox" id="show-all"> show every file</label>
+    <label class="check"><input type="checkbox" id="show-hidden"> hidden</label>
+  </div>
+  <div class="crumbs" style="padding:8px 16px" id="picker-crumbs"></div>
+  <div class="dlg-body">
+    <div class="dlg-side" id="picker-places"></div>
+    <div class="dlg-list" id="picker-list"></div>
+  </div>
+  <div class="dlg-foot">
+    <span class="sub" id="picker-msg"></span>
+    <span style="flex:1"></span>
+    <button id="picker-cancel">Cancel</button>
+    <button class="primary" id="picker-choose">Choose</button>
+  </div>
+</dialog>
+
+<dialog id="doctor">
+  <div class="dlg-head">
+    <strong>What this computer has</strong>
+    <span style="flex:1"></span>
+    <button id="doctor-refresh">Re-check</button>
+    <button id="doctor-close">Close</button>
+  </div>
+  <div class="dlg-body" style="display:block; padding:12px 16px; overflow:auto">
+    <div id="doctor-body">checking...</div>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+
+const TOKEN = new URLSearchParams(location.search).get("t") || "";
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options) {
+  const opts = Object.assign({headers: {}}, options || {});
+  opts.headers["X-Subtitler-Token"] = TOKEN;
+  if (opts.body !== undefined) {
+    opts.method = opts.method || "POST";
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(opts.body);
+  }
+  const res = await fetch(path, opts);
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch (e) { data = {error: text || res.statusText}; }
+  data._status = res.status;
+  return data;
+}
+
+function banner(kind, html) {
+  $("banner").innerHTML = html ? `<div class="msg ${kind}">${html}</div>` : "";
+}
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => (
+    {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]
+  ));
+}
+
+function human(bytes) {
+  if (!bytes) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let n = bytes, i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n < 10 && i > 0 ? n.toFixed(1) : Math.round(n)} ${units[i]}`;
+}
+
+// ------------------------------------------------------------------ form state
+
+const state = {input: "", outDir: "", phrases: "", options: null, job: null, since: 0, timer: null};
+
+function fillSelect(el, values, labels) {
+  el.innerHTML = "";
+  values.forEach((v, i) => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = labels ? labels[i] : (v === "" ? "nothing (use the cache)" : v);
+    el.appendChild(opt);
+  });
+}
+
+function payload() {
+  const kind = $("output-kind").value;
+  const langSel = $("lang-select").value;
+  return {
+    input: state.input,
+    out_dir: state.outDir,
+    engine: $("engine").value,
+    model: $("model").value,
+    device: $("device").value,
+    lang: langSel,
+    denoise: $("denoise").value,
+    burn: true,
+    srt_only: kind === "srt",
+    soft_mux: $("soft_mux").checked,
+    style_preset: $("style_preset").value,
+    canvas: $("canvas").value,
+    canvas_color: $("canvas_color").value,
+    font: $("font").value,
+    font_size: $("font_size").value,
+    batch_size: $("batch_size").value,
+    max_line: $("max_line").value,
+    max_lines: $("max_lines").value,
+    min_dur: $("min_dur").value,
+    max_dur: $("max_dur").value,
+    max_cps: $("max_cps").value,
+    prompt: $("prompt").value,
+    fix: $("fix").checked,
+    fix_model: $("fix_model").value,
+    fix_prompt: $("fix_prompt").value,
+    fix_batch: $("fix_batch").value,
+    fix_workers: $("fix_workers").value,
+    fix_temperature: $("fix_temperature").value,
+    fix_markup: $("fix_markup").value,
+    drop_intro_phrases: state.phrases,
+    force: $("force").value,
+    dry_run: $("dry_run").checked,
+    verbose: $("verbose").checked ? 1 : 0
+  };
+}
+
+let previewTimer = null;
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(refreshPreview, 180);
+}
+
+async function refreshPreview() {
+  if (!state.input) {
+    $("command").textContent = "subtitler run";
+    $("start").disabled = true;
+    $("status").textContent = "Choose a file to begin.";
+    return;
+  }
+  const data = await api("/api/preview", {body: payload()});
+  if (data.ok) {
+    $("command").textContent = data.command;
+    $("start").disabled = state.job && state.job.status === "running";
+    $("status").textContent = "Ready.";
+  } else {
+    $("command").textContent = "subtitler run";
+    $("start").disabled = true;
+    $("status").textContent = `${data.field}: ${data.error}`;
+  }
+}
+
+// ------------------------------------------------------------------ file picker
+
+const picker = {dialog: $("picker"), mode: "file", path: "", selected: "", resolve: null};
+
+async function openPicker(mode, startAt, title) {
+  picker.mode = mode;
+  picker.selected = "";
+  $("picker-title").textContent = title;
+  $("picker-choose").textContent = mode === "dir" ? "Choose this folder" : "Choose";
+  await loadPlaces();
+  await loadDir(startAt || state.options.home);
+  picker.dialog.showModal();
+  return new Promise((resolve) => { picker.resolve = resolve; });
+}
+
+async function loadPlaces() {
+  const side = $("picker-places");
+  side.innerHTML = "";
+  state.options.places.forEach((place) => {
+    const b = document.createElement("button");
+    b.className = "item";
+    b.innerHTML = `<span>&#128193;</span><span>${esc(place.name)}</span>`;
+    b.onclick = () => loadDir(place.path);
+    side.appendChild(b);
+  });
+}
+
+const ICONS = {folder: "&#128193;", audio: "&#127925;", video: "&#127916;", subtitle: "&#128196;", file: "&#128196;"};
+
+async function loadDir(path) {
+  const q = new URLSearchParams({path: path});
+  if ($("show-all").checked || picker.mode === "phrases") q.set("all", "1");
+  if ($("show-hidden").checked) q.set("hidden", "1");
+  const data = await api("/api/files?" + q.toString());
+  if (data.error) { $("picker-msg").textContent = data.error; return; }
+  picker.path = data.path;
+  picker.selected = picker.mode === "dir" ? data.path : "";
+  $("picker-msg").textContent = "";
+  $("picker-crumbs").textContent = data.path;
+
+  const list = $("picker-list");
+  list.innerHTML = "";
+  if (data.parent) {
+    const up = document.createElement("button");
+    up.className = "item";
+    up.innerHTML = "<span>&#11014;</span><span>..</span>";
+    up.onclick = () => loadDir(data.parent);
+    list.appendChild(up);
+  }
+  data.entries.forEach((entry) => {
+    const b = document.createElement("button");
+    b.className = "item";
+    b.innerHTML = `<span>${ICONS[entry.kind] || ICONS.file}</span><span>${esc(entry.name)}</span>` +
+                  (entry.size ? `<span class="sz">${human(entry.size)}</span>` : "");
+    b.onclick = () => {
+      if (entry.is_dir) {
+        if (picker.mode === "dir") {
+          picker.selected = entry.path;
+          [...list.children].forEach((c) => c.classList.remove("sel"));
+          b.classList.add("sel");
+        } else {
+          loadDir(entry.path);
+        }
+      } else {
+        picker.selected = entry.path;
+        [...list.children].forEach((c) => c.classList.remove("sel"));
+        b.classList.add("sel");
+      }
+    };
+    b.ondblclick = () => { if (entry.is_dir) loadDir(entry.path); };
+    list.appendChild(b);
+  });
+  if (!data.entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "sub";
+    empty.style.padding = "10px";
+    empty.textContent = picker.mode === "file"
+      ? "No audio or video files here. Tick 'show every file' if you expected some."
+      : "Nothing here.";
+    list.appendChild(empty);
+  }
+}
+
+$("picker-cancel").onclick = () => { picker.dialog.close(); picker.resolve && picker.resolve(null); };
+$("picker-choose").onclick = () => {
+  picker.dialog.close();
+  picker.resolve && picker.resolve(picker.selected || (picker.mode === "dir" ? picker.path : ""));
+};
+$("show-all").onchange = () => loadDir(picker.path);
+$("show-hidden").onchange = () => loadDir(picker.path);
+
+$("pick-input").onclick = async () => {
+  const chosen = await openPicker("file", state.input ? dirname(state.input) : "", "Choose a file to subtitle");
+  if (chosen) {
+    state.input = chosen;
+    $("input-name").textContent = basename(chosen);
+    $("input-path").textContent = chosen;
+    schedulePreview();
+  }
+};
+
+$("pick-out").onclick = async () => {
+  const chosen = await openPicker("dir", state.outDir || (state.input ? dirname(state.input) : ""), "Choose a folder to save into");
+  if (chosen) { state.outDir = chosen; $("out-path").textContent = chosen; schedulePreview(); }
+};
+$("clear-out").onclick = () => {
+  state.outDir = "";
+  $("out-path").textContent = "the same folder as the input file";
+  schedulePreview();
+};
+$("pick-phrases").onclick = async () => {
+  const chosen = await openPicker("phrases", "", "Choose a phrase list");
+  if (chosen) { state.phrases = chosen; $("phrases-path").textContent = chosen; schedulePreview(); }
+};
+$("clear-phrases").onclick = () => { state.phrases = ""; $("phrases-path").textContent = "no file chosen"; schedulePreview(); };
+
+function basename(p) { return p.split("/").pop(); }
+function dirname(p) { const parts = p.split("/"); parts.pop(); return parts.join("/") || "/"; }
+
+// ------------------------------------------------------------------ doctor
+
+async function pollDoctor(refresh) {
+  const data = await api("/api/doctor" + (refresh ? "?refresh=1" : ""));
+  if (!data.ready) { setTimeout(() => pollDoctor(false), 700); return; }
+  const bad = data.deps.filter((d) => d.status === "fail" && d.required);
+  const warn = data.deps.filter((d) => d.status === "warn");
+  const pill = $("doctor-pill");
+  if (bad.length) {
+    pill.className = "pill bad";
+    pill.textContent = `${bad.length} thing${bad.length > 1 ? "s" : ""} missing`;
+    banner("bad", `<strong>subtitler cannot run yet.</strong> ${bad.map((d) => esc(d.label)).join(", ")}` +
+      ` ${bad.length > 1 ? "are" : "is"} missing. Open <em>Check my computer</em> for the exact command to fix it.`);
+  } else if (warn.length) {
+    pill.className = "pill warn";
+    pill.textContent = "ready, with notes";
+  } else {
+    pill.className = "pill ok";
+    pill.textContent = "everything is here";
+  }
+
+  const rows = data.deps.map((d) => `
+    <tr>
+      <td class="st" style="color:var(--${d.status === "ok" ? "ok" : d.status === "warn" ? "warn" : d.status === "fail" ? "bad" : "muted"})">${esc(d.status)}</td>
+      <td><strong>${esc(d.label)}</strong> ${esc(d.version)}<br><span class="sub">${esc(d.detail)}</span></td>
+      <td class="fix">${d.fix ? "<code>" + esc(d.fix) + "</code>" : ""}</td>
+    </tr>`).join("");
+  $("doctor-body").innerHTML =
+    `<p class="sub">${esc(data.platform)}</p><table class="deps">${rows}</table>`;
+}
+
+$("doctor-open").onclick = () => $("doctor").showModal();
+$("doctor-close").onclick = () => $("doctor").close();
+$("doctor-refresh").onclick = () => { $("doctor-body").textContent = "checking..."; pollDoctor(true); };
+
+// ------------------------------------------------------------------ models
+
+async function refreshModels() {
+  const data = await api("/api/models");
+  if (data.error) return;
+  const wanted = $("model").value.trim() || "large-v3";
+  const spec = data.models.find((m) => m.name === wanted);
+  const btn = $("model-download");
+  if (!spec) {
+    $("model-status").textContent = `${wanted} is not a model subtitler knows how to download.`;
+    btn.classList.add("hide");
+  } else if (spec.cached) {
+    $("model-status").textContent = `${spec.name} (${spec.backend}) is downloaded and ready.`;
+    btn.classList.add("hide");
+  } else {
+    $("model-status").textContent = `${spec.name} (${spec.backend}) is not downloaded yet, about ${spec.size}.`;
+    btn.textContent = `Download ${spec.name} (${spec.size})`;
+    btn.classList.remove("hide");
+    btn.onclick = async () => {
+      const started = await api("/api/models/download", {body: {name: spec.name, backend: spec.backend}});
+      if (started.error) { banner("bad", esc(started.error)); return; }
+      watch(started);
+    };
+  }
+  $("model-hint").textContent = `weights live in ${data.cache_root}`;
+}
+
+// ------------------------------------------------------------------ running
+
+$("start").onclick = async () => {
+  banner("", "");
+  $("result-card").classList.add("hide");
+  const started = await api("/api/run", {body: payload()});
+  if (started.ok === false) {
+    $("status").textContent = `${started.field}: ${started.error}`;
+    return;
+  }
+  if (started.error) { banner("bad", esc(started.error)); return; }
+  watch(started);
+};
+
+function watch(job) {
+  state.job = job;
+  state.since = 0;
+  $("progress-card").classList.remove("hide");
+  $("log").textContent = "";
+  $("job-label").textContent = job.label;
+  $("start").disabled = true;
+  $("status").textContent = "Working...";
+  renderStages(job);
+  clearInterval(state.timer);
+  state.timer = setInterval(poll, 900);
+  poll();
+}
+
+async function poll() {
+  const job = state.job;
+  if (!job) return;
+  const data = await api(`/api/job?id=${encodeURIComponent(job.id)}&since=${state.since}`);
+  if (data.error) return;
+  state.since = data.next;
+  if (data.lines.length) {
+    const log = $("log");
+    log.textContent += data.lines.join("\n") + "\n";
+    log.scrollTop = log.scrollHeight;
+  }
+  $("job-elapsed").textContent = `${data.elapsed_s}s`;
+  renderStages(data);
+  if (data.status === "running") return;
+
+  clearInterval(state.timer);
+  state.timer = null;
+  state.job = null;
+  $("start").disabled = false;
+  if (data.status === "error") {
+    $("status").textContent = "It stopped with an error.";
+    banner("bad", `<strong>${esc(data.error)}</strong>`);
+    return;
+  }
+  $("status").textContent = "Done.";
+  if (data.kind === "download") { banner("ok", "The model is downloaded."); refreshModels(); return; }
+  showResult(data.result);
+}
+
+function renderStages(data) {
+  if (data.kind === "download") { $("stages").innerHTML = ""; return; }
+  const stages = data.stages || [];
+  const at = stages.indexOf(data.stage);
+  $("stages").innerHTML = stages.map((name, i) => {
+    // A finished run ticks everything: the pipeline says nothing on a cold `cues` stage,
+    // so the last line seen is not always the last stage that ran.
+    let cls = "";
+    if (data.status === "done") cls = "done";
+    else if (at >= 0) cls = i < at ? "done" : (i === at ? "active" : "");
+    return `<span class="stage ${cls}">${esc(name)}</span>`;
+  }).join("");
+}
+
+function showResult(result) {
+  if (!result) return;
+  const files = [];
+  if (result.srt) files.push(result.srt);
+  if (result.vtt) files.push(result.vtt);
+  if (result.video) files.push(result.video);
+  const lint = result.lint_violations || [];
+  const label = state.options.reveal_label;
+  const dir = result.out_dir || "";
+  $("result-body").innerHTML = `
+    <p><strong>${result.cue_count} subtitles</strong> from ${esc(result.engine)} in ${result.elapsed_s}s.</p>
+    <pre class="cmd">${files.map(esc).join("\n") || "nothing written (dry run)"}</pre>
+    <div class="row" style="margin-top:12px">
+      ${dir ? `<button class="primary" id="reveal">${esc(label)}</button>` : ""}
+      <span class="sub">${lint.length ? lint.length + " cue-quality notes (long lines or fast reading)" : "no cue-quality problems"}</span>
+    </div>`;
+  $("result-card").classList.remove("hide");
+  const btn = $("reveal");
+  if (btn) btn.onclick = async () => {
+    const target = result.video || result.srt || dir;
+    const res = await api("/api/reveal", {body: {path: target}});
+    if (res.error) banner("warn", esc(res.error));
+  };
+}
+
+// ------------------------------------------------------------------ boot
+
+async function boot() {
+  const opts = await api("/api/options");
+  if (opts.error) {
+    banner("bad", "This page is missing its access token. Reopen the address subtitler printed in the terminal.");
+    return;
+  }
+  state.options = opts;
+  $("version").textContent = `v${opts.version} on ${opts.platform.label}`;
+
+  fillSelect($("engine"), opts.engines);
+  fillSelect($("device"), opts.devices);
+  fillSelect($("denoise"), opts.denoisers);
+  fillSelect($("style_preset"), opts.style_presets);
+  fillSelect($("fix_markup"), opts.markup);
+  fillSelect($("force"), opts.force_stages);
+  fillSelect($("lang-select"), opts.languages.map((l) => l.code), opts.languages.map((l) => `${l.label} (${l.code})`));
+
+  const d = opts.defaults;
+  $("engine").value = d.engine;
+  $("device").value = d.device;
+  $("denoise").value = d.denoise;
+  $("style_preset").value = d.style_preset;
+  $("lang-select").value = d.lang;
+  $("model").value = d.model;
+  $("canvas").value = d.canvas;
+  $("canvas_color").value = d.canvas_color;
+  $("batch_size").value = d.batch_size;
+  $("max_line").value = d.max_line;
+  $("max_lines").value = d.max_lines;
+  $("min_dur").value = d.min_dur;
+  $("max_dur").value = d.max_dur;
+  $("max_cps").value = d.max_cps;
+  $("fix_model").value = d.fix_model;
+  $("fix_prompt").value = d.fix_prompt;
+  $("fix_batch").value = d.fix_batch;
+  $("fix_workers").value = d.fix_workers;
+  $("fix_markup").value = d.fix_markup;
+
+  document.querySelectorAll("input, select, textarea").forEach((el) => {
+    el.addEventListener("change", schedulePreview);
+    if (el.type === "text" || el.type === "number" || el.tagName === "TEXTAREA") {
+      el.addEventListener("input", schedulePreview);
+    }
+  });
+  $("fix").addEventListener("change", () => {
+    $("phrases-box").classList.toggle("hide", !$("fix").checked);
+  });
+  $("model").addEventListener("change", refreshModels);
+
+  pollDoctor(false);
+  refreshModels();
+  refreshPreview();
+}
+
+boot();
+</script>
+</body>
+</html>

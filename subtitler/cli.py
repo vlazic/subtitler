@@ -147,6 +147,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--dry-run", action="store_true", help="print commands, execute nothing")
     p_run.add_argument("--json", action="store_true", help="machine-readable summary on stdout")
 
+    p_gui = sub.add_parser("gui", help="open the graphical interface in your browser")
+    p_gui.add_argument("--port", type=int, default=0, help="0 (the default) picks a free port")
+    p_gui.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="loopback by default; anything else exposes your files to the network",
+    )
+    p_gui.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="print the address instead of opening a browser",
+    )
+
     p_doctor = sub.add_parser("doctor", help="check and install system dependencies")
     p_doctor.add_argument("--install", action="store_true", help="install what is missing")
     p_doctor.add_argument("--yes", action="store_true", help="do not prompt before installing")
@@ -262,6 +275,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
+
+
+def _cmd_gui(args: argparse.Namespace) -> int:
+    from subtitler.config import load_dotenv
+    from subtitler.gui.server import serve
+
+    # Same as `run`: the correction pass reads its API key from .env, and the GUI offers
+    # the same checkbox, so the key has to be loaded before the server starts.
+    load_dotenv()
+    return serve(host=args.host, port=args.port, open_browser=not args.no_browser)
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -459,6 +482,7 @@ def _cmd_convert(args: argparse.Namespace) -> int:
 
 _HANDLERS = {
     "run": _cmd_run,
+    "gui": _cmd_gui,
     "doctor": _cmd_doctor,
     "models": _cmd_models,
     "lint": _cmd_lint,

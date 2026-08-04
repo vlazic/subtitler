@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib
 import struct
 import sys
+import types
 import wave
 from pathlib import Path
 
@@ -227,6 +228,53 @@ class TestCudaLibraryDiscovery:
         monkeypatch.setattr("subtitler.engines.faster._cuda_preloaded", None)
         monkeypatch.setattr("subtitler.engines.faster._nvidia_lib_dirs", lambda roots=None: [lib])
         assert preload_cuda_libraries() is False
+
+    def test_an_explicit_device_cuda_still_preloads(self, tmp_path, monkeypatch) -> None:
+        """Regression: `--device cuda` skipped the preload entirely and died mid-decode.
+
+        `resolve_device()` reaches `preload_cuda_libraries()` only through `_cuda_usable()`,
+        and it only calls that on `--device auto`. Asking for cuda by name therefore handed
+        CTranslate2 an unprepared loader, which searched a system toolkit that ships CUDA
+        11.5 and raised `Library libcublas.so.12 is not found or cannot be loaded` at the
+        first decoded window, on a box where `subtitler doctor` had just reported the CUDA
+        runtime as usable. The GUI is what surfaced it: its Processor dropdown makes "cuda"
+        one click away rather than something only a benchmark run ever typed.
+        """
+        calls: list[int] = []
+        monkeypatch.setattr(
+            "subtitler.engines.faster.preload_cuda_libraries", lambda: calls.append(1) or True
+        )
+        monkeypatch.setattr("subtitler.engines.faster.models.local_path", lambda _spec: tmp_path)
+
+        loaded: list[dict] = []
+
+        class FakeWhisperModel:
+            def __init__(self, path, **kwargs):
+                loaded.append(kwargs)
+
+        monkeypatch.setitem(
+            sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeWhisperModel)
+        )
+
+        engine = FasterWhisperEngine("tiny", device="cuda")
+        engine._load()
+        assert calls == [1], "the preload must run before CTranslate2 looks for libcublas"
+        assert loaded == [{"device": "cuda", "compute_type": "float16"}]
+
+    def test_a_cpu_run_does_not_touch_the_cuda_libraries(self, tmp_path, monkeypatch) -> None:
+        """dlopening several hundred megabytes of CUDA on a CPU-only run is pure latency."""
+        calls: list[int] = []
+        monkeypatch.setattr(
+            "subtitler.engines.faster.preload_cuda_libraries", lambda: calls.append(1) or True
+        )
+        monkeypatch.setattr("subtitler.engines.faster.models.local_path", lambda _spec: tmp_path)
+        monkeypatch.setitem(
+            sys.modules,
+            "faster_whisper",
+            types.SimpleNamespace(WhisperModel=lambda path, **kwargs: object()),
+        )
+        FasterWhisperEngine("tiny", device="cpu")._load()
+        assert calls == []
 
 
 class TestBatching:

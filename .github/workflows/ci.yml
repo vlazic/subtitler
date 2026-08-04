@@ -165,6 +165,57 @@ jobs:
           test -s /tmp/batched/tiny-10s.srt
           cmp /tmp/local/tiny-10s.srt /tmp/batched/tiny-10s.srt
 
+      - name: GUI over a real socket
+        # The GUI is a local web page rather than a Tk window largely because of this
+        # step: both runners are headless and macOS has no Xvfb, so a Tk GUI could not be
+        # exercised on the primary target at all. Here the real server binds, serves the
+        # page, answers the API and reports the machine's dependencies, on both platforms,
+        # with no display anywhere.
+        #
+        # `--no-browser` matters: `webbrowser.open` on a headless runner would either hang
+        # or spawn something nobody closes.
+        run: |
+          uv run subtitler gui --port 8765 --no-browser > /tmp/gui.log 2>&1 &
+          for i in $(seq 1 40); do grep -q 'http://' /tmp/gui.log && break; sleep 0.5; done
+          cat /tmp/gui.log
+          TOKEN=$(grep -o 't=[A-Za-z0-9_-]*' /tmp/gui.log | head -1 | cut -d= -f2)
+          test -n "$TOKEN"
+
+          # The page itself, then the API with and without the token, then the doctor
+          # report, which is the reason a non-technical user opens this at all.
+          curl -sf http://127.0.0.1:8765/ | grep -q '<title>subtitler</title>'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/options)" = 403
+          curl -sf -H "X-Subtitler-Token: $TOKEN" http://127.0.0.1:8765/api/options \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['platform']['label'], d['reveal_label']); assert d['engines'][0]=='auto'"
+          for i in $(seq 1 60); do
+            READY=$(curl -s -H "X-Subtitler-Token: $TOKEN" http://127.0.0.1:8765/api/doctor || true)
+            echo "$READY" | grep -q '"ready": true' && break
+            sleep 2
+          done
+          echo "$READY" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['text']); assert d['ready'], 'the doctor route never became ready'; assert not d['blocking'], d['blocking']"
+
+          # And a real transcription, started and polled exactly as the page does it.
+          curl -sf -X POST -H "X-Subtitler-Token: $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"input":"fixtures/tiny-10s.wav","model":"tiny","srt_only":true,"out_dir":"/tmp/gui-out"}' \
+            http://127.0.0.1:8765/api/run > /tmp/gui-start.json
+          cat /tmp/gui-start.json
+          for i in $(seq 1 90); do
+            curl -sf -H "X-Subtitler-Token: $TOKEN" "http://127.0.0.1:8765/api/job?id=j1&since=0" > /tmp/gui-job.json
+            python3 -c "import json;d=json.load(open('/tmp/gui-job.json'));print(d['status'], d['stage'], d['lines'][-1] if d['lines'] else '')"
+            python3 -c "import json,sys;sys.exit(0 if json.load(open('/tmp/gui-job.json'))['status']!='running' else 1)" && break
+            sleep 2
+          done
+          python3 -c "
+          import json
+          d = json.load(open('/tmp/gui-job.json'))
+          assert d['status'] == 'done', d.get('error') or d
+          assert d['result']['cue_count'] > 0, d
+          assert 'burn' not in d['stages'], d['stages']
+          print('gui run ok:', d['result']['srt'], d['result']['cue_count'], 'cues')
+          "
+          test -s /tmp/gui-out/tiny-10s.srt
+          pkill -f 'subtitler gui' || true
+
       - name: Stage cache
         # PRD acceptance 6: a re-run hits the cache and produces identical output. The
         # timing is printed rather than asserted on, because a two-second bound on a

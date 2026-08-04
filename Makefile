@@ -1,4 +1,4 @@
-.PHONY: help setup setup-mac setup-linux install-deps models run test lint fmt bench bench-report clean
+.PHONY: help setup setup-mac setup-linux install-deps models run gui test lint fmt bench bench-report clean
 
 IN ?=
 RUN ?=
@@ -9,6 +9,7 @@ help:
 	@echo "  install-deps  subtitler doctor --install  (brew on macOS, apt on Debian/Ubuntu)"
 	@echo "  models        download the default local model"
 	@echo "  run IN=file   subtitler run <file>"
+	@echo "  gui           subtitler gui  (opens the browser interface)"
 	@echo "  test          pytest"
 	@echo "  lint / fmt    ruff check / ruff format"
 	@echo "  bench         subtitler bench run"
@@ -40,6 +41,11 @@ models:
 run:
 	@test -n "$(IN)" || (echo "usage: make run IN=path/to/file" && exit 1)
 	uv run subtitler run "$(IN)"
+
+# No extra sync: the GUI is stdlib http.server plus one HTML file, so `make setup` has
+# already installed everything it needs.
+gui:
+	uv run subtitler gui
 
 test:
 	uv run pytest

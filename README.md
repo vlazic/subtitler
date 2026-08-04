@@ -39,9 +39,54 @@ make models         # downloads Whisper large-v3 (about 3 GB, one time)
 `make setup` resolves to `uv sync --extra mlx --extra cloud --extra dev` on macOS and
 `--extra local --extra cloud --extra dev` on Linux, because `mlx-whisper` has no Linux wheels.
 
+## The window, for people who do not use a terminal
+
+```bash
+subtitler gui        # or: make gui
+```
+
+That starts a small server on your own machine and opens your browser at it. Nothing is
+uploaded and nothing leaves the computer: the page is talking to a program running on it,
+and the address it opens (`http://127.0.0.1:...`) is not reachable from anywhere else.
+Leave the terminal window open while you use it, and press Ctrl-C when you are done.
+
+The page covers the whole job:
+
+- **Pick a file** by browsing your own disk, starting from Desktop, Downloads and
+  Movies (Videos on Linux). It filters to audio and video, with a switch to show everything.
+- **Choose what to make**: a video with the subtitles burned in plus the `.srt`/`.vtt`, or
+  the subtitle files alone. Pick the look (outline, box, minimal) and where to save.
+- **Choose how to transcribe**: engine, model, CPU or GPU, language, and the denoise
+  preset. If the model has not been downloaded yet, the page says so and offers a button
+  that downloads it with a progress log, instead of telling you to run a command.
+- **Shape the subtitles**: characters per line, lines per subtitle, shortest and longest
+  duration, reading speed. Everything else, including the steering prompt, the canvas, the
+  fonts, `--force` and the LLM correction pass, is under "Everything else".
+- **Watch it run.** The transcription happens on a worker, so the page stays responsive
+  through a 45-minute file. It shows which stage is running and streams the same log the
+  command line prints, then lists the files it wrote with a button that opens the folder
+  (Show in Finder on macOS).
+- **Check my computer** runs the same checks as `subtitler doctor` and shows what is
+  missing along with the exact command to fix it. This is the point of the button: on macOS
+  `brew install ffmpeg` gives you an ffmpeg without libass, and burn-in silently cannot
+  work. The window tells you before you waste a transcription on it.
+
+Every screen prints the equivalent command line, so anything you set up by clicking can be
+repeated, scripted, or pasted into a bug report.
+
+There is nothing to install for it. The GUI is stdlib `http.server` and one HTML file, with
+no packaging step, no bundled JavaScript, and no compiled dependency, which is also why it
+is a browser page rather than a Tk window: whether `tkinter` exists at all depends on how
+your Python was built, and Homebrew's `python@3.12` does not ship it.
+
+`--port N` pins the port (the default picks a free one) and `--no-browser` just prints the
+address. Do not pass `--host` unless you mean it: the page can read and write files
+anywhere your user can, and binding to anything but loopback hands that to your network.
+
 ## Usage
 
 ```bash
+subtitler gui                                 # the browser interface (see above)
 subtitler run INPUT.mp4                       # transcribe, shape cues, burn in
 subtitler run INPUT.m4a --canvas 1920x1080    # audio-only input gets a video canvas
 subtitler run INPUT.mp4 --srt-only            # sidecar files, no video work
@@ -264,6 +309,9 @@ does batch 32: 6% faster than 16 and 22.5 GB of VRAM against under 16.
 | Pop!_OS 22.04, RTX 3090 | the same, `--batch-size 16` | 54min at RTF 0.015, under 16 GB VRAM |
 | Pop!_OS 22.04, RTX 3090 | CPU int8 against CUDA float16 | identical cue text on the 109s fixture, 96.9% word agreement over 54 minutes |
 | Pop!_OS 22.04, no `--extra cuda` | the CUDA-less fallback | doctor warns and names `libcublas.so.12`, the run decodes on the CPU, exit 0 |
+| Pop!_OS 22.04, Chrome | `subtitler gui` | picked a file, set the options and started a run from the page; 109s of Serbian burned in, 21 cues, 12s |
+| ubuntu-latest and macOS 14 CI | `subtitler gui` | the server binds, serves the page, answers the API, reports dependencies and completes a transcription, headless |
+| Any Mac | `subtitler gui` reveal in Finder | not verified on hardware: `open -R` is covered by a test with a faked `Platform`, never by a Mac |
 
 Both CI runners render `ČĆĐŠŽ čćđšž` identically from the bundled font, which is what the
 bundling is for. CI transcribes with `tiny`, which is fast and cheap and produces poor

@@ -265,6 +265,15 @@ class FasterWhisperEngine:
             )
 
         device, compute_type = self.resolve_device()
+        if device == "cuda":
+            # `resolve_device()` reaches the preload only through `_cuda_usable()`, and it
+            # only consults that on `--device auto`. An explicit `--device cuda` therefore
+            # went straight to CTranslate2 with nothing preloaded, which looked for
+            # libcublas.so.12 against a system toolkit that ships 11.5 and died at the
+            # first decoded window, on a machine where `doctor` had just reported CUDA as
+            # usable. Found from the GUI, whose Processor dropdown makes "cuda" one click
+            # away rather than something only a benchmark run ever typed.
+            preload_cuda_libraries()
         self._model = WhisperModel(str(path), device=device, compute_type=compute_type)
         self._resolved = (device, compute_type)
         return self._model
