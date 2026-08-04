@@ -31,6 +31,10 @@ The `edit` stage's own key is the upstream key plus a digest of the corrections,
 burn re-runs exactly when the text it would render has changed, and not when anything else
 has.
 
+Because it is the one file here a human is invited to open, it is also the one file whose
+faults are reported rather than swallowed: `load` raises `EditFileError` naming the line
+rather than reading a malformed file as "no corrections". See `load`.
+
 **Text only.** An edit may change what a cue says and nothing else. The timings came from
 real word timings and are what `lint` measures reading speed against; letting the editor
 move them would put the one number a human cannot judge by eye under the mouse. Cues are
@@ -56,6 +60,15 @@ ARTIFACT_NAME = "edited.json"
 
 class EditError(ValueError):
     """A correction that cannot be stored, named so a form can point at the cue."""
+
+
+class EditFileError(EditError):
+    """`edits.json` cannot be read, and the message says what is wrong and where.
+
+    Separate from `EditError` because the two have different audiences: `EditError` is
+    raised while validating what a form posted and points at a cue, while this one is
+    raised while reading a file a human is invited to open by hand and points at a line.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,33 +151,90 @@ def clear(work: Path) -> None:
     path_for(work).unlink(missing_ok=True)
 
 
-def load(work: Path) -> EditSet | None:
-    """Read the corrections, or None when there are none to read.
+_RECOVERY = (
+    f"Fix it, or delete {EDITS_NAME} to run without the hand corrections; "
+    "reopening the editor writes a fresh one."
+)
 
-    An unreadable or wrong-schema file is treated as absent rather than fatal. It is the
-    one file in the work directory a human is invited to open, and a typo in it must not
-    make the pipeline refuse to run at all.
+
+def load(work: Path) -> EditSet | None:
+    """Read the corrections, or None when the file is not there at all.
+
+    **A file that is there and unreadable raises.** It used to be treated as absent, on the
+    argument that this is the one file a human is invited to open and a typo in it must not
+    stop the run. That argument is backwards: the corrections are hand-typed text nothing
+    can reconstruct, so discarding them quietly means a run that reports success, burns the
+    uncorrected words into a video, and says nothing at all. A wrong `schema_version`, a
+    trailing comma, or `"edit"` typed for `"edits"` each did exactly that.
+
+    Refusing costs almost nothing by comparison: every stage above this one is cached, so
+    the fix is one edit to a JSON file and a re-run that starts at the corrections. The
+    message names the file, the fault, and where in the file it is, and deleting the file
+    is the documented way to say "run without them".
     """
     path = path_for(work)
     if not path.is_file():
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(data, dict) or data.get("schema_version") != SCHEMA_VERSION:
-        return None
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise EditFileError(f"{path} cannot be read ({exc.strerror or exc}).") from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise EditFileError(
+            f"{path} is not valid JSON: {exc.msg} at line {exc.lineno}, column {exc.colno}. "
+            f"{_RECOVERY}"
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise EditFileError(
+            f"{path} holds a {type(data).__name__}, not an object with "
+            f"schema_version, base_key and edits. {_RECOVERY}"
+        )
+    version = data.get("schema_version")
+    if version != SCHEMA_VERSION:
+        raise EditFileError(
+            f"{path} says schema_version {version!r}; this subtitler reads "
+            f"{SCHEMA_VERSION}. {_RECOVERY}"
+        )
+    if "edits" not in data:
+        raise EditFileError(
+            f'{path} has no "edits" key, so it names no corrections at all '
+            f"(the keys it does have are {sorted(map(str, data))}). {_RECOVERY}"
+        )
+    items = data["edits"]
+    if not isinstance(items, list):
+        raise EditFileError(
+            f'{path}: "edits" must be a list of {{"index": N, "text": "..."}}, '
+            f"not a {type(items).__name__}. {_RECOVERY}"
+        )
+
     texts: dict[int, str] = {}
-    for item in data.get("edits", []):
+    for position, item in enumerate(items):
+        where = f'{path}: entry {position} of "edits"'
+        if not isinstance(item, dict):
+            raise EditFileError(f"{where} is a {type(item).__name__}, not an object. {_RECOVERY}")
+        if "index" not in item:
+            raise EditFileError(f"{where} does not say which cue it corrects. {_RECOVERY}")
         try:
             index = int(item["index"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        text = normalize(item.get("text", ""))
-        if text:
-            texts[index] = text
-    base_key = str(data.get("base_key") or "")
-    return EditSet(base_key=base_key, texts=texts) if base_key else None
+        except (TypeError, ValueError) as exc:
+            raise EditFileError(f"{where} has {item['index']!r} for a cue number.") from exc
+        text = normalize(item.get("text", "") if isinstance(item.get("text"), str) else "")
+        if not text:
+            raise EditFileError(
+                f"{where} would leave cue {index} empty; a cue must say something. {_RECOVERY}"
+            )
+        texts[index] = text
+
+    base_key = str(data.get("base_key") or "").strip()
+    if not base_key:
+        raise EditFileError(
+            f"{path} does not record the base_key the corrections were made against, so "
+            f"nothing can tell whether they are still about this transcript. {_RECOVERY}"
+        )
+    return EditSet(base_key=base_key, texts=texts)
 
 
 # --------------------------------------------------------------------------------------

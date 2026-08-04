@@ -83,21 +83,65 @@ class TestTheFileOnDisk:
         edits_mod.save(tmp_path, built)
         assert edits_mod.load(tmp_path) == built
 
-    def test_an_unreadable_file_reads_as_no_corrections_rather_than_a_crash(
+    def test_no_file_at_all_is_the_only_thing_that_reads_as_no_corrections(
         self, tmp_path: Path
     ) -> None:
-        """It is the one file in the work directory a human is invited to open, and a typo
-        in it must not make the pipeline refuse to run at all."""
-        edits_mod.path_for(tmp_path).write_text("{ not json", encoding="utf-8")
+        """Deleting the file is how a user says "run without them", and the only way."""
         assert edits_mod.load(tmp_path) is None
 
-    def test_a_file_from_a_future_schema_is_ignored_rather_than_misread(
-        self, tmp_path: Path
-    ) -> None:
+    def test_an_unreadable_file_says_what_is_wrong_and_where(self, tmp_path: Path) -> None:
+        """Regression: this used to read as "no corrections", so a trailing comma in the one
+        file a human is invited to open produced a run that reported success and burned the
+        uncorrected words in with nothing said. Hand-typed text is not reconstructible, so
+        losing it silently is worse than stopping."""
+        edits_mod.path_for(tmp_path).write_text(
+            '{"schema_version": 1, "base_key": "k", "edits": [],}', encoding="utf-8"
+        )
+        with pytest.raises(edits_mod.EditFileError) as caught:
+            edits_mod.load(tmp_path)
+        message = str(caught.value)
+        assert "not valid JSON" in message
+        assert "line 1, column 52" in message  # where, not merely that
+        assert edits_mod.EDITS_NAME in message  # and the way back
+
+    def test_a_file_from_another_schema_names_both_versions(self, tmp_path: Path) -> None:
         edits_mod.path_for(tmp_path).write_text(
             json.dumps({"schema_version": 99, "base_key": "k", "edits": []}), encoding="utf-8"
         )
-        assert edits_mod.load(tmp_path) is None
+        with pytest.raises(edits_mod.EditFileError, match="schema_version 99"):
+            edits_mod.load(tmp_path)
+
+    def test_the_key_being_mistyped_is_not_read_as_an_empty_correction_set(
+        self, tmp_path: Path
+    ) -> None:
+        """`"edit"` for `"edits"` is the typo this file invites, and the one that used to be
+        indistinguishable from having made no corrections."""
+        edits_mod.path_for(tmp_path).write_text(
+            json.dumps({"schema_version": 1, "base_key": "k", "edit": [{"index": 1, "text": "a"}]}),
+            encoding="utf-8",
+        )
+        with pytest.raises(edits_mod.EditFileError, match='no "edits" key'):
+            edits_mod.load(tmp_path)
+
+    def test_an_entry_that_names_no_cue_is_refused_rather_than_dropped(
+        self, tmp_path: Path
+    ) -> None:
+        """A correction silently skipped is a correction lost, and the file still says it
+        is there."""
+        edits_mod.path_for(tmp_path).write_text(
+            json.dumps({"schema_version": 1, "base_key": "k", "edits": [{"text": "a"}]}),
+            encoding="utf-8",
+        )
+        with pytest.raises(edits_mod.EditFileError, match="which cue"):
+            edits_mod.load(tmp_path)
+
+    def test_corrections_with_no_base_key_are_refused(self, tmp_path: Path) -> None:
+        edits_mod.path_for(tmp_path).write_text(
+            json.dumps({"schema_version": 1, "edits": [{"index": 1, "text": "a"}]}),
+            encoding="utf-8",
+        )
+        with pytest.raises(edits_mod.EditFileError, match="base_key"):
+            edits_mod.load(tmp_path)
 
     def test_the_digest_changes_with_the_text_and_not_with_the_order(self) -> None:
         """It is the `edit` stage's only cache parameter, so it has to move when the words
