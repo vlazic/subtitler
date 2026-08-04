@@ -179,6 +179,30 @@ class TestAlwaysPresent:
         text = report.render(payload())
         assert "Digits and abbreviations are deliberately not normalized" in text
 
+    def test_a_prompt_echo_is_called_out_above_the_table(self):
+        text = report.render(
+            payload(
+                results=[
+                    cell(
+                        hallucination={
+                            "longest_repeat_n": 0,
+                            "longest_repeat_text": "",
+                            "repetition_collapsed": 0,
+                            "silence_dropped": 0,
+                            "prompt_echo_n": 7,
+                            "prompt_echo_text": "koristi ispravna imena za ljude knjige",
+                            "filler_hits": {},
+                        }
+                    )
+                ]
+            )
+        )
+        assert "echoed the Serbian steering prompt" in text
+        assert "koristi ispravna imena" in text
+
+    def test_no_warning_when_nothing_echoed(self):
+        assert "echoed the Serbian steering prompt" not in report.render(payload())
+
     def test_an_empty_run_still_renders(self):
         text = report.render(payload(results=[]))
         assert "# Benchmark run" in text

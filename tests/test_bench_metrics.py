@@ -110,6 +110,39 @@ class TestFillerHits:
         assert metrics.filler_hits("obican tekst bez ijedne poznate fraze") == {}
 
 
+class TestPromptEcho:
+    """The failure mode this metric was added for, from a real cell.
+
+    `--denoise arnndn` on the `uvod-u-pravo` fixture opened with the tail of the steering
+    prompt instead of the first fifty words of the lecture. Nothing else in `metrics`
+    noticed: the text repeats nothing, has no filler word in it, and reads like Serbian.
+    """
+
+    def test_finds_the_prompt_verbatim_at_the_start_of_a_transcript(self):
+        length, text = metrics.prompt_echo(
+            "Koristi ispravna imena za ljude, knjige, filozofske škole itd. radili i gde smo"
+        )
+        assert length >= 5
+        assert text.startswith("koristi ispravna imena")
+
+    def test_clean_output_echoes_nothing(self):
+        assert metrics.prompt_echo("Misao Lokove filozofije, ukratko izraženo.") == (0, "")
+
+    def test_one_shared_word_is_not_an_echo(self):
+        """Every content word in the prompt is an ordinary Serbian word on its own."""
+        assert metrics.prompt_echo("naveo je imena svih prisutnih") == (0, "")
+
+    def test_the_run_must_be_contiguous_and_in_order(self):
+        assert metrics.prompt_echo("imena koristi ispravna") == (0, "")
+
+    def test_a_custom_prompt_is_honoured(self):
+        length, _ = metrics.prompt_echo("alfa beta gama delta", prompt="beta gama delta")
+        assert length == 3
+
+    def test_empty_input(self):
+        assert metrics.prompt_echo("") == (0, "")
+
+
 class TestHallucination:
     def test_carries_the_engine_counters_through(self):
         result = metrics.hallucination("tekst", repetition_collapsed=3, silence_dropped=2)
@@ -125,6 +158,10 @@ class TestHallucination:
     def test_to_dict_is_json_ready(self):
         payload = metrics.hallucination("Hvala. Hvala.").to_dict()
         assert payload["filler_hits"] == {"hvala": 2}
+
+    def test_the_prompt_echo_is_part_of_the_verdict(self):
+        result = metrics.hallucination("Zadrži srpski jezik i latinično pismo.")
+        assert result.prompt_echo_n >= 5
 
 
 class TestScore:

@@ -33,6 +33,7 @@ from typing import Any
 
 from subtitler.bench import normalize as norm
 from subtitler.cues import CueConfig, display_len
+from subtitler.engines.base import SERBIAN_PROMPT
 from subtitler.model import Cue
 
 __all__ = [
@@ -45,6 +46,7 @@ __all__ = [
     "hallucination",
     "longest_repeated_ngram",
     "percentile",
+    "prompt_echo",
     "score",
 ]
 
@@ -109,6 +111,8 @@ class Hallucination:
     longest_repeat_text: str
     repetition_collapsed: int | None
     silence_dropped: int | None
+    prompt_echo_n: int = 0
+    prompt_echo_text: str = ""
     filler_hits: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -261,11 +265,49 @@ def filler_hits(text: str, phrases: Sequence[str] = FILLER_PHRASES) -> dict[str,
     return counts
 
 
+def prompt_echo(text: str, prompt: str = SERBIAN_PROMPT, *, min_run: int = 3) -> tuple[int, str]:
+    """The longest run of the steering prompt that came back as transcript text.
+
+    Not a hypothetical. `--denoise arnndn` on the `uvod-u-pravo` fixture opens with
+    "Koristi ispravna imena za ljude, knjige, filozofske škole itd.", which is the tail of
+    `engines.base.SERBIAN_PROMPT` verbatim, in place of the first fifty words the speaker
+    actually said. The known cause of that failure mode is batched decoding, which is
+    documented and defended against in `faster.py`; this is the sequential path, and it did
+    it anyway when the denoiser quietened the opening. Nothing else in this file would have
+    noticed: the text repeats nothing, contains no filler word, and reads like Serbian.
+
+    A contiguous run rather than a bag of words, because every content word in the prompt
+    ("imena", "knjige") is an ordinary Serbian word that a lecture may legitimately use.
+    Three in a row in the prompt's own order is not a coincidence.
+    """
+    hay = norm.tokens(text)
+    needle = norm.tokens(prompt)
+    if not hay or not needle:
+        return 0, ""
+
+    best, best_at = 0, 0
+    # Longest common substring over tokens, one row of the usual table at a time.
+    previous = [0] * (len(needle) + 1)
+    for i in range(1, len(hay) + 1):
+        current = [0] * (len(needle) + 1)
+        for j in range(1, len(needle) + 1):
+            if hay[i - 1] == needle[j - 1]:
+                current[j] = previous[j - 1] + 1
+                if current[j] > best:
+                    best, best_at = current[j], i - current[j]
+        previous = current
+
+    if best < min_run:
+        return 0, ""
+    return best, " ".join(hay[best_at : best_at + best])
+
+
 def hallucination(
     text: str,
     *,
     repetition_collapsed: int | None = None,
     silence_dropped: int | None = None,
+    prompt: str = SERBIAN_PROMPT,
 ) -> Hallucination:
     """Everything that suggests the model produced text the speaker did not say.
 
@@ -276,10 +318,13 @@ def hallucination(
     distinct all the way into the report.
     """
     length, phrase = longest_repeated_ngram(text)
+    echo_n, echo_text = prompt_echo(text, prompt)
     return Hallucination(
         longest_repeat_n=length,
         longest_repeat_text=phrase,
         repetition_collapsed=repetition_collapsed,
         silence_dropped=silence_dropped,
+        prompt_echo_n=echo_n,
+        prompt_echo_text=echo_text,
         filler_hits=filler_hits(text),
     )

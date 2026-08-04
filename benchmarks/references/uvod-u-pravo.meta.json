@@ -1,0 +1,9 @@
+{
+  "clip": "uvod-u-pravo",
+  "reference": null,
+  "status": "absent",
+  "human_verified": false,
+  "adjudicated": false,
+  "source": "",
+  "note": "No reference transcript. Reference-free metrics only; WER is not reported for this clip. Phase 8 (LLM adjudication) produces this file."
+}

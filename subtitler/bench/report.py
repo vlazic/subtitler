@@ -45,11 +45,6 @@ def _verified(payload: dict[str, Any], clip_id: str) -> bool:
     return bool(meta.get("human_verified"))
 
 
-def _has_reference(payload: dict[str, Any], clip_id: str) -> bool:
-    meta = payload.get("references", {}).get(clip_id) or {}
-    return meta.get("status") == "present"
-
-
 def leaderboard_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Successful cells, best first.
 
@@ -218,11 +213,13 @@ def _quality(payload: dict[str, Any], ok: Sequence[dict[str, Any]]) -> list[str]
         "cues",
         "mean CPS",
         "p95 CPS",
+        "max CPS",
         "over line %",
         "over dur %",
         "over CPS %",
         "under min dur %",
         "longest repeat",
+        "prompt echo",
         "collapses",
         "silence dropped",
         "filler",
@@ -240,11 +237,17 @@ def _quality(payload: dict[str, Any], ok: Sequence[dict[str, Any]]) -> list[str]
                 str(cue.get("count", 0)),
                 _num(cue.get("mean_cps"), 1),
                 _num(cue.get("p95_cps"), 1),
+                _num(cue.get("max_cps"), 1),
                 _num(cue.get("over_line_pct"), 1),
                 _num(cue.get("over_dur_pct"), 1),
                 _num(cue.get("over_cps_pct"), 1),
                 _num(cue.get("under_min_dur_pct"), 1),
                 f"{repeat} (`{repeat_text}`)" if repeat else "0",
+                (
+                    f"**{hal.get('prompt_echo_n')}** (`{hal.get('prompt_echo_text')}`)"
+                    if hal.get("prompt_echo_n")
+                    else "0"
+                ),
                 "n/a"
                 if hal.get("repetition_collapsed") is None
                 else str(hal["repetition_collapsed"]),
@@ -252,7 +255,21 @@ def _quality(payload: dict[str, Any], ok: Sequence[dict[str, Any]]) -> list[str]
                 ", ".join(f"{k}x{v}" for k, v in sorted(filler.items())) or "none",
             ]
         )
-    return ["## Cue shape and hallucination signals", "", *_table(header, rows), ""]
+    echoed = [
+        r.get("cell_id", "") for r in ok if (r.get("hallucination", {}) or {}).get("prompt_echo_n")
+    ]
+    warning = (
+        [
+            f"**{len(echoed)} cell(s) echoed the Serbian steering prompt back as transcript "
+            f"text**: {', '.join(sorted(echoed))}. That is decoder output standing where "
+            "speech should be, so the affected transcript is missing whatever was said "
+            "there. Worth reading before trusting any other number in that row.",
+            "",
+        ]
+        if echoed
+        else []
+    )
+    return ["## Cue shape and hallucination signals", "", *warning, *_table(header, rows), ""]
 
 
 def _fix_axis(ok: Sequence[dict[str, Any]]) -> list[str]:
