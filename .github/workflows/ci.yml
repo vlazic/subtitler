@@ -36,11 +36,19 @@ jobs:
 
       - name: Install ffmpeg (macOS)
         if: runner.os == 'macOS'
-        # The runner image ships its own ffmpeg. `brew install` is a no-op if that one
-        # satisfies the formula, so force the Homebrew build and put it first on PATH:
-        # the preinstalled binary has no libass, and burn-in needs it.
+        # Two things bite here, both verified from CI output rather than guessed:
+        #
+        # 1. The runner image preinstalls an ffmpeg 8.1.2 into /opt/homebrew/bin whose
+        #    configuration line carries --enable-libx264 and NOT --enable-libass. Burn-in
+        #    needs libass, so that binary is unusable for this project.
+        # 2. The image leaves an untrusted tap (aws/tap) configured, which puts Homebrew
+        #    into a mode where `brew install` prints "Would install ..." and does nothing.
+        #    Untapping is what the warning itself recommends.
+        env:
+          HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
         run: |
-          brew install ffmpeg || brew link --overwrite ffmpeg
+          brew untap aws/tap 2>/dev/null || true
+          brew reinstall --formula ffmpeg
           echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
 
       - name: Record the ffmpeg build
@@ -52,6 +60,8 @@ jobs:
           ffmpeg -version | head -1
           ffmpeg -version | tr ' ' '\n' | grep -E '^--enable-(libass|libx264|libfreetype|libfontconfig)$' || \
             echo "NOTE: none of libass/libx264/freetype/fontconfig in the configuration line"
+          ffmpeg -version | grep -q -- --enable-libass \
+            || { echo "this ffmpeg has no libass; burn-in cannot work with it"; exit 1; }
           # Everything this project needs must exist on both the 4.4 Ubuntu ships and the
           # 8.x Homebrew ships. Ask about each capability individually: the `-filters`
           # table's column layout is not stable across releases, so grepping it produced
