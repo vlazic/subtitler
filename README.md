@@ -71,15 +71,16 @@ installed is a hard error with the exact `uv sync` command to fix it, never a si
 
 | Platform | Engine | Status |
 |---|---|---|
-| Pop!_OS 22.04, ffmpeg 4.4.2 | groq | end to end: transcribe, cues, srt/vtt, burn-in, diacritics |
-| ubuntu-latest CI, ffmpeg 7.x | n/a | doctor, tests, burn-in, hostile paths, diacritics |
-| macOS 14 Apple Silicon CI, ffmpeg-full 8.1.2 | n/a | doctor, tests, burn-in, hostile paths, diacritics |
-| Pop!_OS 22.04 | faster-whisper | not yet verified (lands in Phase 3) |
-| macOS 14 Apple Silicon | mlx | not yet verified (lands in Phase 3) |
+| Pop!_OS 22.04, ffmpeg 4.4.2 | groq | end to end, including burn-in |
+| Pop!_OS 22.04, ffmpeg 4.4.2 | faster-whisper large-v3, CPU int8 | 109s of Serbian at RTF 0.68 |
+| ubuntu-latest CI | faster-whisper tiny | transcribe, burn-in, hostile paths, diacritics |
+| macOS 14 Apple Silicon CI, ffmpeg-full 8.1.2 | mlx tiny | transcribe (RTF 0.40), burn-in, hostile paths, diacritics |
+| Any | faster-whisper on CUDA | not verified: this dev box has CUDA 13 and CTranslate2 wants 12 |
 
 Both CI runners render `ČĆĐŠŽ čćđšž` identically from the bundled font, which is what the
-bundling is for. Transcription on a real Mac is still unverified: CI proves the path runs,
-not that mlx is any good at Serbian. That is what the benchmark is for.
+bundling is for. CI transcribes with `tiny`, which is fast and cheap and produces poor
+Serbian: it proves the path works, not that the output is good. Quality is the benchmark's
+job, not CI's.
 
 This table is updated only when CI or a human actually runs it there. Nothing is listed as
 working because it ought to.
