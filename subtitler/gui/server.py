@@ -66,8 +66,13 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
         token = self.headers.get(TOKEN_HEADER) or query.get("t")
+        # Lowercased, because HTTP header names are case-insensitive and `GuiApp` is a
+        # plain mapping lookup away from the wire.
+        incoming = {key.lower(): value for key, value in self.headers.items()}
         try:
-            response = self.app.handle(method, parts.path, query, body, token=token)
+            response = self.app.handle(
+                method, parts.path, query, body, token=token, headers=incoming
+            )
         except Exception as exc:  # a 500 with a message beats a dead socket
             response = Response(500, f'{{"error":"{type(exc).__name__}: {exc}"}}'.encode())
         self._send(response)
@@ -76,6 +81,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(response.status)
         self.send_header("Content-Type", response.content_type)
         self.send_header("Content-Length", str(len(response.body)))
+        for name, value in response.headers:
+            self.send_header(name, value)
         # The page is regenerated on every launch during development and must never be
         # served from a stale cache after an upgrade.
         self.send_header("Cache-Control", "no-store")

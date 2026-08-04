@@ -1,7 +1,7 @@
 """Stage orchestration.
 
     [fetch] -> [trim] -> probe -> extract -> [denoise] -> transcribe -> cues -> [fix]
-            -> render -> [burn]
+            -> [edit] -> render -> [burn] -> [mux]
 
 Every stage is a pure-ish function elsewhere; this module only sequences them and owns the
 work directory.
@@ -26,6 +26,7 @@ from typing import Any
 
 from subtitler import burn as burn_mod
 from subtitler import cache as cache_mod
+from subtitler import edits as edits_mod
 from subtitler import fetch as fetch_mod
 from subtitler import media, postedit, render
 from subtitler.cues import CueConfig, lint_cues, segments_to_cues
@@ -68,6 +69,10 @@ class RunConfig:
     burn: bool = True
     soft_mux: bool = False
     srt_only: bool = False
+    # Stop once the subtitle files exist, before any video is encoded. What the GUI's
+    # editor runs first, so a human can read the cues and correct them while the burn
+    # (the only expensive step left) has not happened yet.
+    review: bool = False
     canvas: str = "1280x720"
     canvas_color: str = "0x101010"
     style_preset: str = "outline"
@@ -105,12 +110,17 @@ class RunResult:
     srt: Path | None = None
     vtt: Path | None = None
     video: Path | None = None
+    muxed: Path | None = None
     transcript: Transcript | None = None
     cues: tuple[Cue, ...] = ()
     lint: list[str] = field(default_factory=list)
     engine: str = ""
     cached: tuple[str, ...] = ()
     fix: dict[str, Any] | None = None
+    # The key of the stage that produced `cues`. What hand corrections are recorded
+    # against, so a later run can tell whether they are still about this text.
+    cues_key: str = ""
+    edits: dict[str, Any] | None = None
     elapsed_s: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
@@ -121,11 +131,13 @@ class RunResult:
             "srt": str(self.srt) if self.srt else None,
             "vtt": str(self.vtt) if self.vtt else None,
             "video": str(self.video) if self.video else None,
+            "muxed": str(self.muxed) if self.muxed else None,
             "engine": self.engine,
             "cue_count": len(self.cues),
             "lint_violations": self.lint,
             "cached_stages": list(self.cached),
             "fix": self.fix,
+            "edits": self.edits,
             "elapsed_s": round(self.elapsed_s, 2),
             "rtf": round(self.transcript.rtf, 3) if self.transcript else None,
         }
@@ -153,6 +165,39 @@ def trim_window(cfg: RunConfig) -> tuple[float, float | None]:
     return start, end
 
 
+def output_dir(cfg: RunConfig) -> Path:
+    """Where this run's files land. Public so a form can show it before anything starts.
+
+    A URL has no directory of its own to write beside, and defaulting to the current one is
+    exactly what non-negotiable 4 forbids, so `-o` is required for it. Raising here rather
+    than inside the run means the GUI can say so while the button is still unpressed.
+    """
+    if cfg.url:
+        if cfg.out_dir is None:
+            raise media.MediaError(
+                "a URL run needs an output directory: pass -o DIR. "
+                "Nothing is ever written into the current directory."
+            )
+        return cfg.out_dir.expanduser().resolve()
+    if cfg.input is None:
+        raise media.MediaError("nothing to transcribe: pass a file or a URL")
+    src = cfg.input.expanduser().resolve()
+    return (cfg.out_dir or src.parent).expanduser().resolve()
+
+
+def work_dir(cfg: RunConfig) -> Path:
+    """The stage cache for this run, and where `edits.json` is read from and written to.
+
+    Derived from the config alone and never from anything the run learned, so the editor
+    can find the same directory the pipeline will, without having run anything first. For a
+    URL that means naming it from the URL rather than from the video's title: the title
+    costs a network round trip a warm run must not pay.
+    """
+    out = output_dir(cfg)
+    stem = fetch_mod.work_stem(cfg.url) if cfg.url else cfg.input.expanduser().resolve().stem  # type: ignore[union-attr]
+    return out / ".subtitler" / stem
+
+
 def wants_video(cfg: RunConfig) -> bool:
     """Whether this run will produce a picture, and so whether it needs one.
 
@@ -171,25 +216,9 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
     forced = cache_mod.invalidated_from(cfg.force)
     start_s, end_s = trim_window(cfg)
 
-    if cfg.url:
-        if cfg.out_dir is None:
-            # Non-negotiable 4. A file input has a directory of its own to write beside;
-            # a URL has none, and defaulting to the CWD is exactly what that rule forbids.
-            raise media.MediaError(
-                "a URL run needs an output directory: pass -o DIR. "
-                "Nothing is ever written into the current directory."
-            )
-        out_dir = cfg.out_dir.expanduser().resolve()
-        # Named from the URL, not from the video's title: the directory has to exist before
-        # anything is downloaded, and learning the title costs a network round trip that a
-        # warm run must not pay.
-        work = out_dir / ".subtitler" / fetch_mod.work_stem(cfg.url)
-    elif cfg.input is not None:
-        src_in = cfg.input.expanduser().resolve()
-        out_dir = (cfg.out_dir or src_in.parent).expanduser().resolve()
-        work = out_dir / ".subtitler" / src_in.stem
-    else:
-        raise media.MediaError("nothing to transcribe: pass a file or a URL")
+    # Non-negotiable 4 lives in `output_dir`: a URL run without `-o` is refused there.
+    out_dir = output_dir(cfg)
+    work = work_dir(cfg)
 
     cache = cache_mod.StageCache(
         work,
@@ -253,6 +282,11 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
     if cfg.fix is not None:
         cues, cues_key, fix_report = _fix(cfg, cache, cues, cues_key, log)
 
+    # The key the editor's corrections are recorded against is the one for the cues as they
+    # are *presented*, which is after `fix` when it ran.
+    review_key = cues_key
+    cues, cues_key, edit_report = _edit(cfg, cache, cues, cues_key, log)
+
     srt_path = render.write_srt(out_dir / f"{stem}.srt", cues)
     vtt_path = render.write_vtt(out_dir / f"{stem}.vtt", cues)
     log(f"wrote: {srt_path.name}, {vtt_path.name} ({len(cues)} cues)")
@@ -271,14 +305,43 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
         lint=problems,
         engine=engine.name,
         fix=fix_report,
+        cues_key=review_key,
+        edits=edit_report,
     )
+
+    if cfg.review:
+        # Everything cheap is done and nothing has been encoded. The cues are on disk as
+        # .srt and .vtt either way, so stopping here costs a caller that ignores `review`
+        # nothing but the video it did not ask for yet.
+        log(f"review: {len(cues)} cues ready to check")
+        result.cached = tuple(cache.hits)
+        result.elapsed_s = time.monotonic() - started
+        return result
 
     if wants_video(cfg):
         # `src` here is the trimmed fragment when one was asked for, which is the point:
         # burning onto the original would export a full-length video carrying subtitles
         # that match three minutes of it.
-        result.video = _burn(
+        result.video, burn_key = _burn(
             cfg, cache, src, media_id, info, cues, cues_key, out_dir / f"{stem}.subbed.mp4", log
+        )
+    else:
+        burn_key = ""
+
+    if cfg.soft_mux:
+        result.muxed = _mux(
+            cfg,
+            cache,
+            src=src,
+            media_id=media_id,
+            info=info,
+            burned=result.video,
+            burn_key=burn_key,
+            subs=srt_path,
+            cues_key=cues_key,
+            out_dir=out_dir,
+            stem=stem,
+            log=log,
         )
 
     result.cached = tuple(cache.hits)
@@ -531,6 +594,125 @@ def _fix(
     return fixed, entry.key, report.to_dict()
 
 
+def _edit(
+    cfg: RunConfig,
+    cache: cache_mod.StageCache,
+    cues: tuple[Cue, ...],
+    cues_key: str,
+    log: Any,
+) -> tuple[tuple[Cue, ...], str, dict[str, Any] | None]:
+    """Apply the hand corrections the GUI's editor saved, as their own cached stage.
+
+    The stage's input is `edits.json`, which no stage writes, and its key is the upstream
+    key plus a digest of the corrections. `edits.py` has the full argument for why that is
+    the only placement where a correction both survives a re-run and re-burns exactly once.
+
+    A correction set recorded against a different transcript is reported and skipped, never
+    re-pointed and never deleted: cue 41 of the old transcript is not cue 41 of the new one,
+    and going back to the old model must make them line up again.
+    """
+    if not cache.enabled:
+        return cues, cues_key, None
+
+    saved = edits_mod.load(cache.work)
+    if saved is None or not saved:
+        return cues, cues_key, None
+
+    if saved.base_key != cues_key:
+        log(
+            f"edit: {len(saved.texts)} hand correction(s) in {edits_mod.EDITS_NAME} were made "
+            "against a different transcript and are NOT being applied. Open the editor again "
+            "to redo them, or go back to the settings they were made under."
+        )
+        return (
+            cues,
+            cues_key,
+            {"applied": [], "stale": len(saved.texts), "base_key": saved.base_key},
+        )
+
+    artifact = cache.work / edits_mod.ARTIFACT_NAME
+    entry = cache.begin(
+        "edit",
+        input_hash=cues_key,
+        # The digest, not the corrections themselves: a meta file carrying a paragraph of
+        # Serbian per corrected cue stops being readable by hand.
+        params={"edits": saved.digest()},
+        artifacts=(artifact,),
+    )
+    if entry.hit:
+        payload = read_json(artifact)
+        edited = cues_from_dict(payload)
+        applied = payload.get("applied", [])
+        log(f"edit: cached ({len(applied)} hand correction(s))")
+        return edited, entry.key, {"applied": applied, "stale": 0}
+
+    edited, applied = edits_mod.apply_edits(cues, saved, cfg.cues)
+    write_json(artifact, {**cues_to_dict(edited), "applied": applied})
+    cache.commit(entry)
+    log(f"edit: {len(applied)} hand correction(s) applied")
+    return edited, entry.key, {"applied": applied, "stale": 0}
+
+
+def _mux(
+    cfg: RunConfig,
+    cache: cache_mod.StageCache,
+    *,
+    src: Path,
+    media_id: str,
+    info: media.MediaInfo,
+    burned: Path | None,
+    burn_key: str,
+    subs: Path,
+    cues_key: str,
+    out_dir: Path,
+    stem: str,
+    log: Any,
+) -> Path | None:
+    """`--soft-mux`: the same subtitles as a track the viewer can switch off.
+
+    Which video the track goes onto is the whole decision. A source that has a picture gets
+    it, because clean pixels plus a switchable track is the entire point of a soft track,
+    and a run with the burn on therefore hands back two files that differ in exactly that.
+    An audio-only input has no picture until the burn generates one, so there the burned
+    canvas is the only candidate and the track rides along beside the rendered text.
+    `--srt-only` asked for no video work at all and gets none.
+
+    A stream copy, so it costs a second even on a long file; cached anyway, because the
+    stage chain is what makes `--force cues` re-mux and `--style-preset` not.
+    """
+    if cfg.srt_only:
+        log("soft-mux: skipped, --srt-only does no video work")
+        return None
+
+    if info.has_video:
+        source, source_id, origin = src, media_id, "the source video"
+    elif burned is not None:
+        source, source_id, origin = burned, burn_key, "the burned canvas"
+    else:
+        log("soft-mux: skipped, this input has no video and the burn is turned off")
+        return None
+
+    # Matroska is the only one of the three that carries styled subtitles, and a WebM's
+    # VP9/Opus streams do not belong in an MP4 either, so a webm source becomes an mkv.
+    suffix = ".mkv" if source.suffix.lower() in {".mkv", ".webm"} else ".mp4"
+    dst = out_dir / f"{stem}.softsubs{suffix}"
+
+    entry = cache.begin(
+        "mux",
+        input_hash=cues_key,
+        params={"source": source_id, "origin": origin, "container": suffix},
+        artifacts=(dst,),
+    )
+    if entry.hit:
+        log(f"soft-mux: cached ({dst.name})")
+        return dst
+
+    burn_mod.soft_mux(source, subs, dst, dry_run=cfg.dry_run)
+    cache.commit(entry)
+    log(f"muxed: {dst.name} (a switchable track on {origin})")
+    return dst
+
+
 def _burn(
     cfg: RunConfig,
     cache: cache_mod.StageCache,
@@ -541,7 +723,7 @@ def _burn(
     cues_key: str,
     dst: Path,
     log: Any,
-) -> Path:
+) -> tuple[Path, str]:
     if info.has_video and info.width and info.height:
         width, height = info.width, info.height
         video, audio = src, None
@@ -575,7 +757,7 @@ def _burn(
     )
     if entry.hit:
         log(f"burn: cached ({dst.name})")
-        return dst
+        return dst, entry.key
 
     burn_mod.burn(
         cues,
@@ -593,4 +775,4 @@ def _burn(
     )
     cache.commit(entry)
     log(f"burned: {dst.name} ({width}x{height})")
-    return dst
+    return dst, entry.key

@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from subtitler.model import Cue, Segment, Word, ensure_words
+from subtitler.model import Cue, Segment, Word, ensure_words, synthesize_words
 
 # Serbian enclitics. These lean on the word before them and must never start a line:
 # a break in front of "je" or "se" reads as a stutter.
@@ -299,6 +299,37 @@ def _best_wrap_point(words: tuple[Word, ...], cfg: CueConfig) -> int | None:
             best = candidate
 
     return best[2] if best else None
+
+
+def wrap_edited(
+    text: str, *, start: float, end: float, config: CueConfig | None = None
+) -> tuple[str, ...]:
+    """Lay out text that was written, rather than split out of a run of timed words.
+
+    Two callers need this: the LLM correction pass, and the human editor in the GUI. Both
+    hand back a cue whose text has changed, so the line break has to be recomputed, and it
+    has to be recomputed *the same way the splitter would*. Wrapping with the plain greedy
+    `wrap_text` looked fine and was not: on the Serbian fixture it turned
+
+        Da se opšta predstava,          into    Da se opšta predstava, da
+        da se ono što je istinito,              se ono što je istinito,
+
+    which strands the clitic "se" at the start of line two, the exact break `CLITICS`
+    exists to forbid. `wrap_words` needs word timings, so they are synthesized across the
+    cue's own span: the pause rank never fires on synthesized words, but the clitic,
+    preposition and punctuation rules all do, and those are what was being lost.
+
+    `wrap_text`, which `wrap_words` falls back to, truncates to `max_lines` when the text
+    needs more. That is unreachable in the normal pipeline (the splitter guarantees a chunk
+    fits) and very reachable here, where somebody else decides how long the text is, so an
+    overflow keeps every line and lets `lint` report it rather than deleting the tail.
+    """
+    cfg = config or CueConfig()
+    words = synthesize_words(Segment(start=start, end=end, text=text))
+    lines = wrap_words(words, cfg) if words else ()
+    if " ".join(lines) != " ".join(text.split()):
+        lines = wrap_text(text, max_line=cfg.max_line, max_lines=len(text.split()) or 1)
+    return lines
 
 
 def wrap_text(text: str, *, max_line: int, max_lines: int) -> tuple[str, ...]:

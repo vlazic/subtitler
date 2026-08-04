@@ -49,6 +49,7 @@ primary target**, Linux is the development platform.
 | `subtitler/render.py` | SRT and VTT writers plus the validator |
 | `subtitler/burn.py` | `.ass` generation and the three ffmpeg burn commands |
 | `subtitler/postedit.py` | optional LiteLLM correction pass |
+| `subtitler/edits.py` | hand corrections from the GUI editor: the artifact, and the `edit` stage |
 | `subtitler/doctor.py` | dependency detection and install |
 | `subtitler/gui/` | the browser UI: `forms` (pure), `files`, `jobs`, `app`, `server` |
 | `subtitler/bench/` | benchmark matrix, Serbian normalization, metrics, report |
@@ -101,11 +102,18 @@ primary target**, Linux is the development platform.
 - **LiteLLM's `num_retries` needs `tenacity`, and LiteLLM does not depend on it.** Without
   it the first retryable error becomes `tenacity import failed`, which hid a plain missing
   `ANTHROPIC_API_KEY` behind a package name. It is in the `fix` extra for that reason.
-- The correction pass re-wraps the text it changed, and it must go through
-  `cues.wrap_words`, not the greedy `wrap_text`. Wrapping with the latter stranded the
-  clitic "se" at the start of a line, which is the exact break `cues.CLITICS` forbids. A
-  cue whose text came back unchanged keeps its original break: the splitter chose it from
-  real word timings, and nothing downstream can do better.
+- Any text that did not come out of the splitter has to be re-wrapped through
+  `cues.wrap_edited` (which goes through `wrap_words`), never the greedy `wrap_text`.
+  Wrapping with the latter stranded the clitic "se" at the start of a line, which is the
+  exact break `cues.CLITICS` forbids. Two callers now: the correction pass and the GUI's
+  hand editor. A cue whose text came back unchanged keeps its original break: the splitter
+  chose it from real word timings, and nothing downstream can do better.
+- **Hand corrections are nobody's stage artifact.** Writing them into `cues.json` means the
+  next run recomputes that stage against an unchanged key and silently overwrites them;
+  putting them in the `cues` key means every keystroke invalidates a transcript-derived
+  artifact. They live in `edits.json`, read as the input of the `edit` stage, which records
+  the cues key they were made against so a moved transcript reports and skips them instead
+  of re-pointing them at whatever now holds that index. See `subtitler/edits.py`.
 - **The GUI is a local web page, not tkinter, and non-negotiable 6 is why.** Tk is a
   property of the *interpreter build*: python.org and uv-managed builds ship it, Homebrew's
   `python@3.12` does not pull `python-tk`, and the failure is an `ImportError` about

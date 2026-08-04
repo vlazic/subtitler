@@ -339,6 +339,22 @@ def soft_mux_cmd(src: Path, subs: Path, dst: Path, *, language: str = "srp") -> 
     ]
 
 
+def soft_mux(
+    src: Path, subs: Path, dst: Path, *, language: str = "srp", dry_run: bool = False
+) -> Path:
+    """Attach `subs` to `src` as a switchable track. No re-encode, so it takes a second.
+
+    Unlike `burn`, there is no filtergraph and therefore no path to escape: both files are
+    plain argv entries, so this runs in the caller's cwd rather than a temp one.
+    """
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    run(
+        soft_mux_cmd(src.resolve(), subs.resolve(), dst.resolve(), language=language),
+        dry_run=dry_run,
+    )
+    return dst
+
+
 def preview_cmd(
     src: Path,
     dst: Path,

@@ -149,7 +149,9 @@ class TestInvalidatedFrom:
         Keeping cues computed from the previous transcript would leave the run internally
         inconsistent: subtitles that do not match the words in transcribe.json.
         """
-        assert invalidated_from("transcribe") == frozenset({"transcribe", "cues", "fix", "burn"})
+        assert invalidated_from("transcribe") == frozenset(
+            {"transcribe", "cues", "fix", "edit", "burn", "mux"}
+        )
 
     def test_the_first_stage_invalidates_everything(self):
         assert invalidated_from("fetch") == frozenset(STAGE_ORDER)
@@ -170,11 +172,16 @@ class TestInvalidatedFrom:
 
     def test_forcing_the_extraction_still_takes_everything_after_it(self):
         assert invalidated_from("extract") == frozenset(
-            {"extract", "denoise", "transcribe", "cues", "fix", "burn"}
+            {"extract", "denoise", "transcribe", "cues", "fix", "edit", "burn", "mux"}
         )
 
     def test_the_last_stage_invalidates_only_itself(self):
-        assert invalidated_from("burn") == frozenset({"burn"})
+        assert invalidated_from("mux") == frozenset({"mux"})
+
+    def test_the_burn_takes_the_soft_track_with_it(self):
+        """`mux` copies the burned canvas when the input is audio-only, so a re-burn has to
+        re-mux or the switchable track would be attached to a video that no longer exists."""
+        assert invalidated_from("burn") == frozenset({"burn", "mux"})
 
     def test_unknown_stage_names_the_choices(self):
         with pytest.raises(CacheError, match="transcribe"):

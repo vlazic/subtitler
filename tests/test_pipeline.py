@@ -18,7 +18,8 @@ from pathlib import Path
 import pytest
 
 from subtitler import burn as burn_mod
-from subtitler import pipeline, postedit
+from subtitler import edits as edits_mod
+from subtitler import media, pipeline, postedit
 from subtitler.cues import CueConfig
 from subtitler.model import Segment, Transcript, Word
 from subtitler.pipeline import RunConfig, run_pipeline
@@ -77,6 +78,7 @@ class FakeBurner:
     def __call__(self, cues, dst: Path, **kwargs) -> Path:
         self.calls += 1
         self.last = kwargs
+        self.cues = cues
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(b"fake mp4 " + str(len(cues)).encode())
         return dst
@@ -617,3 +619,221 @@ class TestFromSource:
         monkeypatch.delitem(sys.modules, "yt_dlp", raising=False)
         run_pipeline(cfg(tmp_path, start="2", end="5"), log=lambda _m: None)
         assert "yt_dlp" not in sys.modules
+
+
+class TestReviewStop:
+    """`--review` stops once the subtitle files exist, before anything is encoded."""
+
+    def test_the_subtitles_are_written_and_no_video_is(self, tmp_path, fakes):
+        _engine, burner = fakes
+        result = run_pipeline(cfg(tmp_path, review=True), log=lambda _m: None)
+        assert result.srt is not None and result.srt.exists()
+        assert result.video is None
+        assert burner.calls == 0
+
+    def test_the_cues_and_the_key_they_were_made_against_come_back(self, tmp_path, fakes):
+        """The editor records its corrections against this key, so a run that did not hand
+        one out could not have its corrections checked for staleness later."""
+        result = run_pipeline(cfg(tmp_path, review=True), log=lambda _m: None)
+        assert result.cues
+        assert len(result.cues_key) == 16
+
+    def test_approving_afterwards_pays_only_for_the_burn(self, tmp_path, fakes):
+        """The whole point of stopping rather than running a second, separate pipeline: a
+        45-minute transcription must not happen twice because the user read the text."""
+        engine, burner = fakes
+        run_pipeline(cfg(tmp_path, review=True), log=lambda _m: None)
+        assert (engine.calls, burner.calls) == (1, 0)
+
+        second = run_pipeline(cfg(tmp_path), log=lambda _m: None)
+        assert (engine.calls, burner.calls) == (1, 1)
+        assert set(second.cached) >= {"extract", "transcribe", "cues"}
+
+    def test_a_url_review_still_fetches_the_video(self, tmp_path, fakes, fetcher):
+        """`wants_video` must not be answered by "is this run going to burn right now".
+        A review run that downloaded audio only would make the approval re-download."""
+        run_pipeline(
+            RunConfig(url=URL, out_dir=tmp_path, engine="fake", review=True),
+            log=lambda _m: None,
+        )
+        assert fetcher.calls == ["video"]
+
+
+class TestEditStage:
+    """Hand corrections: applied, survived, and correctly refused when they go stale."""
+
+    @staticmethod
+    def _review(tmp_path, **overrides):
+        return run_pipeline(cfg(tmp_path, review=True, **overrides), log=lambda _m: None)
+
+    def test_a_correction_reaches_the_srt_and_the_burn(self, tmp_path, fakes):
+        _engine, burner = fakes
+        first = self._review(tmp_path)
+        work = pipeline.work_dir(cfg(tmp_path))
+        edits_mod.save(work, edits_mod.build(first.cues_key, {"1": "Sasvim drugačiji tekst"}))
+
+        result = run_pipeline(cfg(tmp_path), log=lambda _m: None)
+        assert result.cues[0].text == "Sasvim drugačiji tekst"
+        assert "Sasvim drugačiji tekst" in result.srt.read_text(encoding="utf-8")
+        assert burner.calls == 1
+        # And the pixels, not merely the text file beside them.
+        assert burner.cues[0].text == "Sasvim drugačiji tekst"
+
+    def test_the_corrections_survive_a_re_run_of_the_cues_stage(self, tmp_path, fakes):
+        """The trap this design exists for. `cues.json` is the `cues` stage's artifact, so
+        anything written into it is recomputed away on the next run without a word. The
+        corrections live in a file no stage writes."""
+        first = self._review(tmp_path)
+        work = pipeline.work_dir(cfg(tmp_path))
+        edits_mod.save(work, edits_mod.build(first.cues_key, {"1": "Ostaje posle ponovnog rada"}))
+
+        run_pipeline(cfg(tmp_path, force="cues"), log=lambda _m: None)
+        again = run_pipeline(cfg(tmp_path), log=lambda _m: None)
+        assert again.cues[0].text == "Ostaje posle ponovnog rada"
+
+    def test_a_second_run_with_the_same_corrections_does_not_re_burn(self, tmp_path, fakes):
+        """The other half of the trap: putting the corrections in the `cues` key would
+        re-run the burn every time the editor was opened."""
+        _engine, burner = fakes
+        first = self._review(tmp_path)
+        work = pipeline.work_dir(cfg(tmp_path))
+        edits_mod.save(work, edits_mod.build(first.cues_key, {"1": "Jedna izmena"}))
+
+        run_pipeline(cfg(tmp_path), log=lambda _m: None)
+        assert burner.calls == 1
+        second = run_pipeline(cfg(tmp_path), log=lambda _m: None)
+        assert burner.calls == 1
+        assert "burn" in second.cached and "edit" in second.cached
+
+    def test_changing_the_text_re_burns_and_changing_nothing_else_does(self, tmp_path, fakes):
+        _engine, burner = fakes
+        first = self._review(tmp_path)
+        work = pipeline.work_dir(cfg(tmp_path))
+        edits_mod.save(work, edits_mod.build(first.cues_key, {"1": "Prva verzija"}))
+        run_pipeline(cfg(tmp_path), log=lambda _m: None)
+        assert burner.calls == 1
+
+        edits_mod.save(work, edits_mod.build(first.cues_key, {"1": "Druga verzija"}))
+        run_pipeline(cfg(tmp_path), log=lambda _m: None)
+        assert burner.calls == 2
+
+    def test_a_correction_made_against_another_transcript_is_reported_not_applied(
+        self, tmp_path, fakes
+    ):
+        """Cue 1 of the old transcript is not cue 1 of the new one. Re-pointing the
+        corrections at whatever now holds that index is the worst available outcome, so
+        they are named in the log and skipped."""
+        first = self._review(tmp_path)
+        work = pipeline.work_dir(cfg(tmp_path))
+        edits_mod.save(work, edits_mod.build(first.cues_key, {"1": "Za stari prepis"}))
+
+        lines: list[str] = []
+        # A different cue layout is a different `cues` key, exactly as a new model is.
+        stale = run_pipeline(cfg(tmp_path, cues=CueConfig(max_line=20)), log=lines.append)
+        assert stale.cues[0].text != "Za stari prepis"
+        assert stale.edits == {"applied": [], "stale": 1, "base_key": first.cues_key}
+        assert any("different transcript" in line for line in lines)
+
+    def test_nothing_is_deleted_so_going_back_makes_them_apply_again(self, tmp_path, fakes):
+        first = self._review(tmp_path)
+        work = pipeline.work_dir(cfg(tmp_path))
+        edits_mod.save(work, edits_mod.build(first.cues_key, {"1": "Vraca se"}))
+
+        run_pipeline(cfg(tmp_path, cues=CueConfig(max_line=20)), log=lambda _m: None)
+        back = run_pipeline(cfg(tmp_path), log=lambda _m: None)
+        assert back.cues[0].text == "Vraca se"
+
+    def test_a_run_with_no_corrections_writes_no_edit_stage_at_all(self, tmp_path, fakes):
+        """So a user who never opens the editor gets byte-identical behaviour and the same
+        cache keys as before this existed."""
+        run_pipeline(cfg(tmp_path), log=lambda _m: None)
+        work = pipeline.work_dir(cfg(tmp_path))
+        assert not (work / "edit.meta.json").exists()
+        assert not (work / "edited.json").exists()
+
+
+class TestSoftMux:
+    """`--soft-mux` used to be accepted by both interfaces and read by neither."""
+
+    @pytest.fixture
+    def muxer(self, monkeypatch):
+        calls: list[dict] = []
+
+        def fake(src, subs, dst, *, language="srp", dry_run=False):
+            calls.append({"src": src, "subs": subs, "dst": dst, "language": language})
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(b"muxed")
+            return dst
+
+        monkeypatch.setattr(burn_mod, "soft_mux", fake)
+        return calls
+
+    def test_the_flag_actually_produces_a_file(self, tmp_path, fakes, muxer):
+        result = run_pipeline(cfg(tmp_path, soft_mux=True), log=lambda _m: None)
+        assert result.muxed is not None and result.muxed.exists()
+        assert result.to_dict()["muxed"] == str(result.muxed)
+        assert len(muxer) == 1
+
+    def test_without_the_flag_nothing_is_muxed(self, tmp_path, fakes, muxer):
+        assert run_pipeline(cfg(tmp_path), log=lambda _m: None).muxed is None
+        assert muxer == []
+
+    def test_the_track_carries_the_rendered_srt(self, tmp_path, fakes, muxer):
+        result = run_pipeline(cfg(tmp_path, soft_mux=True), log=lambda _m: None)
+        assert muxer[0]["subs"] == result.srt
+        assert muxer[0]["language"] == "srp"
+
+    def test_an_audio_only_input_gets_the_track_on_the_burned_canvas(self, tmp_path, fakes, muxer):
+        """There is no other picture to attach it to, and refusing would make the flag do
+        nothing on exactly the inputs this tool is used for most."""
+        result = run_pipeline(cfg(tmp_path, soft_mux=True), log=lambda _m: None)
+        assert muxer[0]["src"] == result.video
+
+    def test_srt_only_says_it_is_skipping_rather_than_failing(self, tmp_path, fakes, muxer):
+        lines: list[str] = []
+        result = run_pipeline(cfg(tmp_path, soft_mux=True, srt_only=True), log=lines.append)
+        assert result.muxed is None
+        assert muxer == []
+        assert any("soft-mux: skipped" in line for line in lines)
+
+    def test_no_video_anywhere_is_a_sentence_not_a_traceback(self, tmp_path, fakes, muxer):
+        lines: list[str] = []
+        result = run_pipeline(cfg(tmp_path, soft_mux=True, burn=False), log=lines.append)
+        assert result.muxed is None
+        assert any("no video" in line for line in lines)
+
+    def test_a_second_run_does_not_re_mux(self, tmp_path, fakes, muxer):
+        run_pipeline(cfg(tmp_path, soft_mux=True), log=lambda _m: None)
+        second = run_pipeline(cfg(tmp_path, soft_mux=True), log=lambda _m: None)
+        assert len(muxer) == 1
+        assert "mux" in second.cached
+
+    def test_a_hand_correction_re_muxes(self, tmp_path, fakes, muxer):
+        """The track is the text, so the chain has to reach it. Keying the mux on the burn
+        alone would ship a switchable track that still said the uncorrected thing."""
+        first = run_pipeline(cfg(tmp_path, soft_mux=True, review=True), log=lambda _m: None)
+        run_pipeline(cfg(tmp_path, soft_mux=True), log=lambda _m: None)
+        assert len(muxer) == 1
+
+        work = pipeline.work_dir(cfg(tmp_path))
+        edits_mod.save(work, edits_mod.build(first.cues_key, {"1": "Ispravljeno"}))
+        run_pipeline(cfg(tmp_path, soft_mux=True), log=lambda _m: None)
+        assert len(muxer) == 2
+
+
+class TestWorkDirIsPredictable:
+    """The editor has to find the same directory the pipeline will, without running it."""
+
+    def test_a_file_run_uses_the_stem_beside_the_output(self, tmp_path):
+        assert pipeline.work_dir(cfg(tmp_path)) == tmp_path / ".subtitler" / FIXTURE.stem
+        assert pipeline.output_dir(cfg(tmp_path)) == tmp_path
+
+    def test_a_url_run_is_named_from_the_url_not_from_a_title(self, tmp_path):
+        """The title costs a network round trip, and a warm run must not pay for one."""
+        config = RunConfig(url=URL, out_dir=tmp_path)
+        assert pipeline.work_dir(config).parent == tmp_path / ".subtitler"
+        assert pipeline.work_dir(config).name.startswith("url-")
+
+    def test_a_url_with_nowhere_to_write_is_refused_here_too(self):
+        with pytest.raises(media.MediaError, match="output directory"):
+            pipeline.output_dir(RunConfig(url=URL))

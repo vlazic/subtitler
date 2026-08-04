@@ -153,6 +153,32 @@ table.deps td.st { width: 46px; font-weight: 600; font-size: 11px; text-transfor
 table.deps td.fix { color: var(--muted); font-size: 12px; }
 .hide { display: none !important; }
 a { color: var(--accent); }
+
+/* ---- the cue editor ---- */
+#cue-list { max-height: 62vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.cue { border-bottom: 1px solid var(--line); padding: 9px 11px; }
+.cue:last-child { border-bottom: 0; }
+.cue.flagged { background: color-mix(in srgb, var(--warn) 9%, transparent); }
+.cue.edited { box-shadow: inset 3px 0 0 var(--accent); }
+.cue-head { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.cue-no { font-weight: 600; color: var(--text); min-width: 2.2em; }
+.cue-clock { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.cue-head .grow { flex: 1; }
+.cue-head button { padding: 2px 9px; font-size: 12px; }
+.cue textarea {
+  margin-top: 6px; min-height: 0; height: 52px; font-size: 14px; line-height: 1.4;
+}
+.cue-lines { margin-top: 5px; font-size: 12px; color: var(--muted); }
+.cue-lines .ln { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.cue-lines .ln .n { color: var(--muted); opacity: 0.7; }
+.cue-lines .ln.over .n { color: var(--bad); font-weight: 600; }
+.notes { margin-top: 5px; display: flex; gap: 6px; flex-wrap: wrap; }
+.note {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--warn); color: var(--warn);
+}
+.note.bad { border-color: var(--bad); color: var(--bad); }
+.playing { border-color: var(--accent) !important; color: var(--accent); }
 </style>
 </head>
 <body>
@@ -169,13 +195,28 @@ a { color: var(--accent); }
 <div id="banner"></div>
 
 <section class="card">
-  <h2>1. The file to subtitle</h2>
+  <h2>1. What to subtitle</h2>
   <div class="filebox">
     <div class="grow">
       <div class="name" id="input-name">No file chosen yet</div>
       <div class="path" id="input-path">Pick an audio or video file from your computer.</div>
     </div>
     <button class="primary" id="pick-input">Choose a file</button>
+    <button id="clear-input" class="hide">Clear</button>
+  </div>
+  <label class="field" style="margin-top:12px">...or paste a link
+    <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=...">
+    <span class="hint" id="url-hint">a link needs a folder to save into, chosen below</span>
+  </label>
+  <div class="grid" style="margin-top:10px">
+    <label class="field">Start at
+      <input type="text" id="start" placeholder="blank = the beginning">
+      <span class="hint">SS, MM:SS or HH:MM:SS</span>
+    </label>
+    <label class="field">Stop at
+      <input type="text" id="end" placeholder="blank = the end">
+      <span class="hint">subtitle times start from the cut, not from the original</span>
+    </label>
   </div>
 </section>
 
@@ -203,6 +244,9 @@ a { color: var(--accent); }
   </div>
   <label class="check" style="margin-top:10px">
     <input type="checkbox" id="soft_mux"> Also add a switchable subtitle track to the video
+  </label>
+  <label class="check" style="margin-top:8px">
+    <input type="checkbox" id="review" checked> Let me read and correct the subtitles before the video is made
   </label>
 </section>
 
@@ -309,6 +353,23 @@ a { color: var(--accent); }
   <pre class="log" id="log"></pre>
 </section>
 
+<section class="card hide" id="review-card">
+  <h2>Check the subtitles</h2>
+  <p class="sub" id="review-intro"></p>
+  <div class="row" style="margin-bottom:10px">
+    <label class="check"><input type="checkbox" id="only-flagged"> only the ones with notes</label>
+    <span style="flex:1"></span>
+    <span class="sub" id="review-count"></span>
+  </div>
+  <div id="cue-list"></div>
+  <audio id="cue-audio" preload="none" class="hide"></audio>
+  <div class="row" style="margin-top:16px">
+    <button class="primary big" id="approve">Looks right, make the video</button>
+    <button id="review-cancel">Not now</button>
+    <span class="sub" id="review-status"></span>
+  </div>
+</section>
+
 <section class="card hide" id="result-card">
   <h2>Result</h2>
   <div id="result-body"></div>
@@ -319,7 +380,7 @@ a { color: var(--accent); }
 <div class="footer">
   <div class="inner">
     <span class="status" id="status">Choose a file to begin.</span>
-    <button class="primary big" id="start" disabled>Start</button>
+    <button class="primary big" id="start-run" disabled>Start</button>
   </div>
 </div>
 
@@ -412,8 +473,14 @@ function fillSelect(el, values, labels) {
 function payload() {
   const kind = $("output-kind").value;
   const langSel = $("lang-select").value;
+  const url = $("url").value.trim();
   return {
-    input: state.input,
+    // One field on the wire, because `RunConfig.from_source` makes the path-or-link
+    // decision in one place and the page must not make a second one.
+    input: url || state.input,
+    start: $("start").value,
+    end: $("end").value,
+    review: $("review").checked,
     out_dir: state.outDir,
     engine: $("engine").value,
     model: $("model").value,
@@ -456,20 +523,22 @@ function schedulePreview() {
 }
 
 async function refreshPreview() {
-  if (!state.input) {
+  const url = $("url").value.trim();
+  $("clear-input").classList.toggle("hide", !state.input);
+  if (!state.input && !url) {
     $("command").textContent = "subtitler run";
-    $("start").disabled = true;
-    $("status").textContent = "Choose a file to begin.";
+    $("start-run").disabled = true;
+    $("status").textContent = "Choose a file, or paste a link, to begin.";
     return;
   }
   const data = await api("/api/preview", {body: payload()});
   if (data.ok) {
     $("command").textContent = data.command;
-    $("start").disabled = state.job && state.job.status === "running";
+    $("start-run").disabled = Boolean(state.job && state.job.status === "running");
     $("status").textContent = "Ready.";
   } else {
     $("command").textContent = "subtitler run";
-    $("start").disabled = true;
+    $("start-run").disabled = true;
     $("status").textContent = `${data.field}: ${data.error}`;
   }
 }
@@ -575,6 +644,13 @@ $("pick-input").onclick = async () => {
   }
 };
 
+$("clear-input").onclick = () => {
+  state.input = "";
+  $("input-name").textContent = "No file chosen yet";
+  $("input-path").textContent = "Pick an audio or video file from your computer.";
+  schedulePreview();
+};
+
 $("pick-out").onclick = async () => {
   const chosen = await openPicker("dir", state.outDir || (state.input ? dirname(state.input) : ""), "Choose a folder to save into");
   if (chosen) { state.outDir = chosen; $("out-path").textContent = chosen; schedulePreview(); }
@@ -657,9 +733,10 @@ async function refreshModels() {
 
 // ------------------------------------------------------------------ running
 
-$("start").onclick = async () => {
+$("start-run").onclick = async () => {
   banner("", "");
   $("result-card").classList.add("hide");
+  $("review-card").classList.add("hide");
   const started = await api("/api/run", {body: payload()});
   if (started.ok === false) {
     $("status").textContent = `${started.field}: ${started.error}`;
@@ -675,7 +752,7 @@ function watch(job) {
   $("progress-card").classList.remove("hide");
   $("log").textContent = "";
   $("job-label").textContent = job.label;
-  $("start").disabled = true;
+  $("start-run").disabled = true;
   $("status").textContent = "Working...";
   renderStages(job);
   clearInterval(state.timer);
@@ -701,7 +778,7 @@ async function poll() {
   clearInterval(state.timer);
   state.timer = null;
   state.job = null;
-  $("start").disabled = false;
+  $("start-run").disabled = false;
   if (data.status === "error") {
     $("status").textContent = "It stopped with an error.";
     banner("bad", `<strong>${esc(data.error)}</strong>`);
@@ -709,6 +786,7 @@ async function poll() {
   }
   $("status").textContent = "Done.";
   if (data.kind === "download") { banner("ok", "The model is downloaded."); refreshModels(); return; }
+  if (data.result && data.result.review) { showReview(data.result); return; }
   showResult(data.result);
 }
 
@@ -732,6 +810,7 @@ function showResult(result) {
   if (result.srt) files.push(result.srt);
   if (result.vtt) files.push(result.vtt);
   if (result.video) files.push(result.video);
+  if (result.muxed) files.push(result.muxed);
   const lint = result.lint_violations || [];
   const label = state.options.reveal_label;
   const dir = result.out_dir || "";
@@ -751,6 +830,204 @@ function showResult(result) {
   };
 }
 
+// ------------------------------------------------------------------ the editor
+//
+// The page never decides where a line breaks and never decides whether a cue is too fast
+// to read. Both come from the server, from `cues.wrap_edited` and `cues.lint_cues`, which
+// are the same two functions the burn and the `lint` command use. A second implementation
+// here would be a second set of rules about Serbian clitics kept in sync by hope.
+
+const review = {open: false, cues: [], original: new Map(), edits: new Map(), baseKey: "",
+                limits: {max_line: 42, max_cps: 20}, media: null, pending: new Set(), timer: null};
+
+function clock(seconds) {
+  const ms = Math.max(0, Math.round(seconds * 1000));
+  const m = Math.floor(ms / 60000), s = Math.floor((ms % 60000) / 1000);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(ms % 1000).padStart(3, "0")}`;
+}
+
+// "cue 7 line 2: 48 chars (max 42)" reads better in a dense list without the part that
+// repeats the number already in front of the row.
+function shortNote(text) { return String(text).replace(/^cue \d+(?: line (\d+))?: /, (m, n) => (n ? `line ${n}: ` : "")); }
+
+function norm(text) { return String(text || "").trim().replace(/\s+/g, " "); }
+
+function showReview(result) {
+  const data = result.review;
+  review.open = true;
+  review.baseKey = data.base_key;
+  review.limits = data.limits;
+  review.media = data.media;
+  review.cues = data.cues;
+  review.edits = new Map();
+  review.original = new Map();
+  data.cues.forEach((c) => review.original.set(c.index, norm(c.text)));
+  (data.edited || []).forEach((i) => review.edits.set(i, norm((data.cues.find((c) => c.index === i) || {}).text)));
+
+  $("review-intro").textContent =
+    `${data.cues.length} subtitles from ${result.engine}. Nothing has been encoded yet: fix what was heard wrong, then make the video.` +
+    (data.stale ? ` ${data.stale} earlier correction(s) were made against a different transcript and were not reapplied.` : "");
+  $("review-status").textContent = "";
+  $("cue-audio").classList.toggle("hide", !review.media);
+  if (review.media) $("cue-audio").src = `/api/media?t=${encodeURIComponent(TOKEN)}`;
+  renderCues();
+  $("review-card").classList.remove("hide");
+  $("review-card").scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function renderCues() {
+  const list = $("cue-list");
+  list.innerHTML = "";
+  review.cues.forEach((c) => list.appendChild(cueRow(c)));
+  updateCount();
+}
+
+function cueRow(c) {
+  const row = document.createElement("div");
+  row.className = "cue";
+  row.dataset.index = c.index;
+  row.innerHTML = `
+    <div class="cue-head">
+      <span class="cue-no">${c.index}</span>
+      <span class="cue-clock">${clock(c.start)} &rarr; ${clock(c.end)}</span>
+      <span class="dur">${c.duration.toFixed(1)}s</span>
+      <span class="cps">${c.cps == null ? "" : c.cps.toFixed(1) + " chars/s"}</span>
+      <span class="grow"></span>
+      ${review.media ? '<button class="play">&#9654; Listen</button>' : ""}
+    </div>
+    <textarea class="cue-text" spellcheck="false"></textarea>
+    <div class="cue-lines"></div>
+    <div class="notes"></div>`;
+  row.querySelector("textarea").value = c.text;
+  row.querySelector("textarea").addEventListener("input", () => queueCheck(c.index));
+  const play = row.querySelector(".play");
+  if (play) play.onclick = () => playSpan(c.start, c.end, play);
+  paint(row, c);
+  return row;
+}
+
+function paint(row, c) {
+  const edited = review.edits.has(c.index);
+  row.classList.toggle("flagged", (c.problems || []).length > 0);
+  row.classList.toggle("edited", edited);
+  row.querySelector(".dur").textContent = `${c.duration.toFixed(1)}s`;
+  row.querySelector(".cps").textContent = c.cps == null ? "" : `${c.cps.toFixed(1)} chars/s`;
+  // What libass will actually put on screen, line by line, with the width that decides it.
+  row.querySelector(".cue-lines").innerHTML = (c.lines || [])
+    .map((line, i) => {
+      const width = (c.line_widths || [])[i];
+      const over = width != null && width > review.limits.max_line;
+      return `<div class="ln ${over ? "over" : ""}">${esc(line)} <span class="n">${width == null ? "" : width}</span></div>`;
+    })
+    .join("");
+  row.querySelector(".notes").innerHTML =
+    (c.problems || []).map((p) => `<span class="note">${esc(shortNote(p))}</span>`).join("") +
+    (edited ? '<span class="note" style="border-color:var(--accent);color:var(--accent)">corrected</span>' : "");
+  applyFilter(row, c);
+}
+
+function applyFilter(row, c) {
+  const only = $("only-flagged").checked;
+  row.classList.toggle("hide", only && !(c.problems || []).length && !review.edits.has(c.index));
+}
+
+function updateCount() {
+  const flagged = review.cues.filter((c) => (c.problems || []).length).length;
+  $("review-count").textContent =
+    `${flagged} with quality notes, ${review.edits.size} corrected` +
+    (review.limits ? ` (limits: ${review.limits.max_line} chars a line, ${review.limits.max_cps} chars a second)` : "");
+}
+
+$("only-flagged").addEventListener("change", () => {
+  [...$("cue-list").children].forEach((row, i) => applyFilter(row, review.cues[i]));
+});
+
+function queueCheck(index) {
+  review.pending.add(index);
+  clearTimeout(review.timer);
+  review.timer = setTimeout(flushChecks, 250);
+}
+
+async function flushChecks() {
+  const indices = [...review.pending];
+  review.pending.clear();
+  if (!indices.length) return;
+
+  const rows = indices.map((index) => {
+    const cue = review.cues.find((c) => c.index === index);
+    const el = $("cue-list").querySelector(`.cue[data-index="${index}"] textarea`);
+    const text = el ? el.value : cue.text;
+    if (norm(text) === review.original.get(index)) review.edits.delete(index);
+    else review.edits.set(index, norm(text));
+    // An untouched cue is sent as its existing lines, never as text: re-wrapping it would
+    // throw away a break the splitter chose from real word timings.
+    const untouched = norm(text) === review.original.get(index);
+    return untouched
+      ? {index, start: cue.start, end: cue.end, text: "", lines: cue.lines}
+      : {index, start: cue.start, end: cue.end, text};
+  });
+
+  const data = await api("/api/cues/check", {body: Object.assign({cues: rows}, payload())});
+  if (!data.ok) { $("review-status").textContent = data.error || "could not check those cues"; return; }
+  data.cues.forEach((fresh) => {
+    const at = review.cues.findIndex((c) => c.index === fresh.index);
+    if (at < 0) return;
+    // Keep the text the user is typing; take the layout and the verdict from the server.
+    review.cues[at] = Object.assign({}, fresh, {text: review.cues[at].text});
+    const row = $("cue-list").querySelector(`.cue[data-index="${fresh.index}"]`);
+    if (row) paint(row, review.cues[at]);
+  });
+  updateCount();
+}
+
+// ---- listening to a cue
+
+let stopAt = null, playingButton = null;
+$("cue-audio").addEventListener("timeupdate", () => {
+  const el = $("cue-audio");
+  if (stopAt != null && el.currentTime >= stopAt) {
+    el.pause();
+    stopAt = null;
+    if (playingButton) { playingButton.classList.remove("playing"); playingButton = null; }
+  }
+});
+
+function playSpan(start, end, button) {
+  const el = $("cue-audio");
+  if (playingButton) playingButton.classList.remove("playing");
+  playingButton = button;
+  button.classList.add("playing");
+  // A little before and after, because a cue's own boundary cuts the first syllable and
+  // judging a reading speed from a clipped phrase is worse than judging it from the text.
+  stopAt = end + 0.15;
+  el.currentTime = Math.max(0, start - 0.1);
+  el.play().catch(() => {
+    $("review-status").textContent = "This browser will not play that file; the text checks still work.";
+    button.classList.remove("playing");
+  });
+}
+
+$("review-cancel").onclick = () => {
+  $("cue-audio").pause();
+  $("review-card").classList.add("hide");
+  review.open = false;
+};
+
+$("approve").onclick = async () => {
+  await flushChecks();
+  $("cue-audio").pause();
+  const edits = {};
+  review.edits.forEach((text, index) => { edits[index] = text; });
+  const started = await api("/api/burn", {body: Object.assign({}, payload(), {
+    review: false, base_key: review.baseKey, edits
+  })});
+  if (started.ok === false) { $("review-status").textContent = `${started.field || ""} ${started.error}`.trim(); return; }
+  if (started.error) { banner("bad", esc(started.error)); return; }
+  $("review-card").classList.add("hide");
+  review.open = false;
+  watch(started);
+};
+
 // ------------------------------------------------------------------ boot
 
 async function boot() {
@@ -761,6 +1038,9 @@ async function boot() {
   }
   state.options = opts;
   $("version").textContent = `v${opts.version} on ${opts.platform.label}`;
+  $("url-hint").textContent = opts.fetch_available
+    ? "YouTube and anything else yt-dlp handles. A link needs a folder to save into, chosen below."
+    : `Downloading a link needs yt-dlp, which is not installed: ${opts.fetch_hint}`;
 
   fillSelect($("engine"), opts.engines);
   fillSelect($("device"), opts.devices);

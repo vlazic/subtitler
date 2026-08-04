@@ -23,12 +23,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from subtitler import __version__, doctor, models
+from subtitler import __version__, doctor, media, models
+from subtitler import edits as edits_mod
 from subtitler.gui import files, forms, jobs
 from subtitler.gui.jobs import JobManager
-from subtitler.pipeline import run_pipeline
+from subtitler.model import Cue
+from subtitler.pipeline import output_dir, run_pipeline, work_dir
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+# One range response is capped rather than sized to the request, so that scrubbing a
+# 90-minute lecture never reads the whole file into this process's memory. Answering with
+# fewer bytes than were asked for is what the range machinery is for; the browser simply
+# asks again for the rest.
+RANGE_CHUNK = 4 * 1024 * 1024
 
 Opener = Callable[[Sequence[str]], None]
 
@@ -38,6 +46,9 @@ class Response:
     status: int
     body: bytes
     content_type: str = "application/json; charset=utf-8"
+    # Extra headers, which only the media route needs: a browser will not seek inside an
+    # <audio> element unless the server answers ranges.
+    headers: tuple[tuple[str, str], ...] = ()
 
 
 def _json(payload: Any, status: int = 200) -> Response:
@@ -75,6 +86,10 @@ class GuiApp:
         self.jobs = JobManager(spawn=self._spawn)
         self._doctor_report: dict[str, Any] | None = None
         self._doctor_running = False
+        # The media the last review run actually transcribed: the trimmed fragment when
+        # there was one, the downloaded file for a URL. Remembered rather than accepted as
+        # a parameter, so `/api/media` cannot be turned into "read any file on this disk".
+        self._review_media: Path | None = None
 
     # ---------------------------------------------------------------- dispatch
 
@@ -86,8 +101,10 @@ class GuiApp:
         body: bytes = b"",
         *,
         token: str | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> Response:
         query = query or {}
+        headers = headers or {}
 
         if not path.startswith("/api/"):
             return self._static(path)
@@ -114,6 +131,12 @@ class GuiApp:
             return self._run(_body(body))
         if route == ("POST", "/api/preview"):
             return self._preview(_body(body))
+        if route == ("POST", "/api/cues/check"):
+            return self._check(_body(body))
+        if route == ("POST", "/api/burn"):
+            return self._approve(_body(body))
+        if route == ("GET", "/api/media"):
+            return self._media(headers)
         if route == ("GET", "/api/job"):
             return self._job(query)
         if route == ("POST", "/api/reveal"):
@@ -252,10 +275,14 @@ class GuiApp:
             cfg = forms.build_config(payload)
         except forms.FormError as exc:
             return _json({"ok": False, **exc.to_dict()}, 400)
+        return self._start_run(cfg)
 
+    def _start_run(self, cfg: Any) -> Response:
         runner = self._runner
         command = forms.command_line(cfg)
-        out_dir = str((cfg.out_dir or cfg.input.parent).expanduser())
+        # `output_dir` and not `cfg.input.parent`: a URL run has no input path, and
+        # reaching for one is the AttributeError this route used to raise on every link.
+        out_dir = str(output_dir(cfg))
 
         def work(log: jobs.Log) -> dict[str, Any]:
             log(f"$ {command}")
@@ -264,15 +291,143 @@ class GuiApp:
             summary["out_dir"] = str(
                 Path(summary["srt"]).parent if summary.get("srt") else Path(out_dir)
             )
+            if cfg.review:
+                summary["review"] = self._review_payload(cfg, result)
             return summary
 
         return self._start(
             "run",
-            cfg.input.name,
+            forms.job_label(cfg),
             work,
             stages=forms.stages_for(cfg),
             command=command,
             out_dir=out_dir,
+        )
+
+    # ---------------------------------------------------------------- the editor
+
+    def _review_payload(self, cfg: Any, result: Any) -> dict[str, Any]:
+        """Everything the editor needs to open, computed once when the run stops.
+
+        The per-cue quality report is built by the same `edits.cue_report` the live check
+        route uses, so the marks a cue carries when the page opens and the marks it carries
+        after a keystroke are produced by one function rather than two that can drift.
+        """
+        media_path = Path(result.input) if getattr(result, "input", None) else None
+        self._review_media = media_path if media_path and media_path.is_file() else None
+        return {
+            "base_key": getattr(result, "cues_key", ""),
+            "cues": edits_mod.cue_reports(result.cues, cfg.cues),
+            "limits": {
+                "max_line": cfg.cues.max_line,
+                "max_lines": cfg.cues.max_lines,
+                "min_dur": cfg.cues.min_dur,
+                "max_dur": cfg.cues.max_dur,
+                "max_cps": cfg.cues.max_cps,
+            },
+            "edited": (result.edits or {}).get("applied", []),
+            "stale": (result.edits or {}).get("stale", 0),
+            "media": str(media_path) if self._review_media else None,
+        }
+
+    def _check(self, payload: Mapping[str, Any]) -> Response:
+        """Re-wrap and re-lint cues as they are typed.
+
+        The wrapping happens here rather than in JavaScript because `cues.wrap_edited` is
+        the only thing allowed to choose a line break: a second implementation in the page
+        would be a second set of rules about Serbian clitics, kept in sync by hope.
+        """
+        try:
+            cfg = forms.cue_config(payload)
+        except forms.FormError as exc:
+            return _json({"ok": False, **exc.to_dict()}, 400)
+
+        rows = payload.get("cues")
+        if not isinstance(rows, list):
+            return _error("expected a list of cues to check")
+
+        out: list[dict[str, Any]] = []
+        for row in rows[:500]:
+            if not isinstance(row, Mapping):
+                continue
+            try:
+                index = int(row.get("index", 0))
+                start = float(row.get("start", 0.0))
+                end = float(row.get("end", 0.0))
+            except (TypeError, ValueError):
+                continue
+            text = str(row.get("text") or "")
+            lines = row.get("lines")
+            if isinstance(lines, list) and lines and not text.strip():
+                cue = Cue(index=index, start=start, end=end, lines=tuple(str(x) for x in lines))
+            else:
+                cue = edits_mod.relayout(
+                    Cue(index=index, start=start, end=end, lines=()), text, cfg
+                )
+            out.append(edits_mod.cue_report(cue, cfg))
+        return _json({"ok": True, "cues": out})
+
+    def _approve(self, payload: Mapping[str, Any]) -> Response:
+        """Save the corrections and run the second half: render, burn, and any soft mux.
+
+        The corrections are written to `edits.json` in the work directory rather than
+        carried in the request that starts the job, because that file is the pipeline's
+        input and outlives the browser tab. See `edits.py`.
+        """
+        settings = {k: v for k, v in payload.items() if k not in {"edits", "base_key"}}
+        settings["review"] = False
+        try:
+            cfg = forms.build_config(settings)
+        except forms.FormError as exc:
+            return _json({"ok": False, **exc.to_dict()}, 400)
+
+        try:
+            edit_set = edits_mod.build(payload.get("base_key", ""), payload.get("edits") or {})
+        except edits_mod.EditError as exc:
+            return _error(str(exc))
+
+        try:
+            work = work_dir(cfg)
+        except media.MediaError as exc:
+            return _error(str(exc))
+
+        if edit_set:
+            edits_mod.save(work, edit_set)
+        else:
+            # Nothing was corrected this time, so a set left over from a previous pass
+            # must not be applied behind the user's back.
+            edits_mod.clear(work)
+        return self._start_run(cfg)
+
+    def _media(self, headers: Mapping[str, str]) -> Response:
+        """The audio the cues were made from, so a cue can be heard rather than counted.
+
+        Range requests are answered because a browser will not seek inside an <audio>
+        element without them, and seeking is the entire feature: the editor plays the span
+        of the cue being typed, which is the only way to judge "too fast to read".
+        """
+        target = self._review_media
+        if target is None or not target.is_file():
+            return _error("no media to play; run a review first", 404)
+
+        size = target.stat().st_size
+        kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        span = _parse_range(headers.get("range", ""), size)
+        if span is None:
+            return Response(200, target.read_bytes(), kind, (("Accept-Ranges", "bytes"),))
+
+        start, end = span
+        with target.open("rb") as handle:
+            handle.seek(start)
+            chunk = handle.read(end - start + 1)
+        return Response(
+            206,
+            chunk,
+            kind,
+            (
+                ("Accept-Ranges", "bytes"),
+                ("Content-Range", f"bytes {start}-{start + len(chunk) - 1}/{size}"),
+            ),
         )
 
     def _start(
@@ -316,6 +471,33 @@ class GuiApp:
             # must not read like a failure of the run that produced it.
             return _error(f"could not open the file manager ({exc}); the folder is {target}", 500)
         return _json({"ok": True, "argv": list(argv)})
+
+
+def _parse_range(header: str, size: int) -> tuple[int, int] | None:
+    """`bytes=START-END` to an inclusive, clamped, capped span. None means "send it all".
+
+    Only the single-range form is handled, which is the only one a media element sends.
+    Anything unparseable falls back to the whole file rather than a 416, because a player
+    that gets bytes is a player that works.
+    """
+    value = (header or "").strip().lower()
+    if not value.startswith("bytes=") or "," in value or size <= 0:
+        return None
+    first, _, last = value[len("bytes=") :].partition("-")
+    try:
+        if first == "":
+            # A suffix range: the last N bytes.
+            length = int(last)
+            start, end = max(size - length, 0), size - 1
+        else:
+            start = int(first)
+            end = int(last) if last else size - 1
+    except ValueError:
+        return None
+    if start >= size or start < 0 or end < start:
+        return None
+    end = min(end, size - 1, start + RANGE_CHUNK - 1)
+    return start, end
 
 
 def _body(raw: bytes) -> dict[str, Any]:

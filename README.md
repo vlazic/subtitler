@@ -69,6 +69,9 @@ The page covers the whole job:
 
 - **Pick a file** by browsing your own disk, starting from Desktop, Downloads and
   Movies (Videos on Linux). It filters to audio and video, with a switch to show everything.
+- **Or paste a link**, with a start and stop time beside it. Same yt-dlp path the command
+  line uses. A link has no folder of its own to write beside, so the page asks for one
+  before it will start; that is non-negotiable 4, said while the button is still unpressed.
 - **Choose what to make**: a video with the subtitles burned in plus the `.srt`/`.vtt`, or
   the subtitle files alone. Pick the look (outline, box, minimal) and where to save.
 - **Choose how to transcribe**: engine, model, CPU or GPU, language, and the denoise
@@ -79,8 +82,10 @@ The page covers the whole job:
   fonts, `--force` and the LLM correction pass, is under "Everything else".
 - **Watch it run.** The transcription happens on a worker, so the page stays responsive
   through a 45-minute file. It shows which stage is running and streams the same log the
-  command line prints, then lists the files it wrote with a button that opens the folder
-  (Show in Finder on macOS).
+  command line prints (including yt-dlp's download progress), then lists the files it wrote
+  with a button that opens the folder (Show in Finder on macOS).
+- **Read the subtitles before the video is made.** On by default, and the section below is
+  about what it does to the cache.
 - **Check my computer** runs the same checks as `subtitler doctor` and shows what is
   missing along with the exact command to fix it. This is the point of the button: on macOS
   `brew install ffmpeg` gives you an ffmpeg without libass, and burn-in silently cannot
@@ -98,6 +103,70 @@ your Python was built, and Homebrew's `python@3.12` does not ship it.
 address. Do not pass `--host` unless you mean it: the page can read and write files
 anywhere your user can, and binding to anything but loopback hands that to your network.
 
+## Checking the subtitles before the video is made
+
+Recognition gets names, foreign words and proper nouns wrong, and the only way to know is
+to read them. With **"Let me read and correct the subtitles before the video is made"**
+ticked (it is by default), the run stops as soon as the cues exist, before anything is
+encoded, and the page turns into an editor:
+
+- every cue with its **start, end and duration**, because "too fast to read" is not a
+  judgement anyone can make from a character count;
+- a **Listen** button that plays that cue's span of the source audio, so you can hear what
+  was actually said instead of guessing;
+- the **lines as they will be rendered**, each with the number of characters that decides
+  whether it fits;
+- and a **live quality check**: as you type, the cue is re-broken and re-checked, and any
+  cue that breaks a rule is highlighted with the reason in the same words `subtitler lint`
+  would use. Long line, too short, too long, too fast. Markup (`<b>`, `<i>`) is not
+  counted, because a player renders it as weight and not as width.
+
+Nothing is re-checked in the browser: the page sends the text back and the server answers
+with `cues.wrap_edited` and `cues.lint_cues`, the same two functions the burn and the
+`lint` command use. A second implementation in JavaScript would be a second set of rules
+about Serbian clitics, kept in sync by hope.
+
+Then **"Looks right, make the video"** burns it. On the command line the same stop is
+`subtitler run FILE --review`, which writes the `.srt` and `.vtt` and stops.
+
+**Timings are never edited, only text.** The clock came from real word timings and is what
+reading speed is measured against; a mouse that could drag it would put the one number a
+human cannot judge by eye under the mouse. Cues are never added or removed either, which is
+what keeps a correction addressable across re-runs.
+
+### What the editor does to the cache, and what happens when the transcript changes
+
+Corrections go into `<output>/.subtitler/<name>/edits.json`, which is **nobody's stage
+artifact**. That is the entire design, and the two obvious alternatives are both wrong:
+
+- write them into `cues.json` and the next run recomputes that stage, the key still
+  matches, and `segments_to_cues` overwrites every correction without a word;
+- put them in the `cues` stage's key and they survive, but now every keystroke invalidates
+  a transcript-derived artifact that has nothing to do with them.
+
+So they are read as the input of a stage of their own, `edit`, sitting between `cues`/`fix`
+and `burn`. Its key is the upstream key plus a digest of the corrections, which means the
+burn re-runs exactly when the text it would render changed, and never because the editor
+was opened and closed again.
+
+`edits.json` records the key of the cues it was written against. When you change the model,
+the denoiser, the cue shape, or pass `--force transcribe`, that key moves, and the
+corrections are **reported and skipped rather than applied**:
+
+```
+edit: 2 hand correction(s) in edits.json were made against a different transcript and are
+NOT being applied. Open the editor again to redo them, or go back to the settings they
+were made under.
+```
+
+Cue 41 of the old transcript is not cue 41 of the new one, and quietly re-pointing them at
+whatever now holds that index is the worst available outcome. Nothing is deleted either:
+switch back to the settings they were made under and they line up again and apply. Opening
+the editor on the new transcript and correcting it there is the way forward.
+
+A run where nobody has ever opened the editor writes no `edit` stage at all and has exactly
+the cache keys it had before this existed.
+
 ## Usage
 
 ```bash
@@ -105,6 +174,8 @@ subtitler gui                                 # the browser interface (see above
 subtitler run INPUT.mp4                       # transcribe, shape cues, burn in
 subtitler run INPUT.m4a --canvas 1920x1080    # audio-only input gets a video canvas
 subtitler run INPUT.mp4 --srt-only            # sidecar files, no video work
+subtitler run INPUT.mp4 --review              # write the subtitles and stop before the video
+subtitler run INPUT.mp4 --soft-mux            # also a switchable subtitle track
 subtitler run INPUT.mp4 --style-preset box    # outline | box | minimal
 subtitler run INPUT.mp4 --engine groq         # cloud instead of local
 subtitler run INPUT.mp3 --batch-size 16       # NVIDIA GPU: ~3x again, see below
@@ -179,6 +250,33 @@ fragment may begin up to one keyframe interval early (1.2 seconds on the clip be
 the boundary is approximate; nothing inside the fragment is misaligned, because the
 transcript is made from the fragment itself.
 
+## A switchable subtitle track
+
+`--soft-mux` adds the subtitles to the video as a track the viewer can turn off, without
+re-encoding anything. It takes about a second and writes `NAME.softsubs.mp4` beside the
+rest.
+
+Which video the track goes onto is the only decision here. A source that already has a
+picture gets it, because clean pixels plus a switchable track is the entire point of a soft
+track: a run with `--soft-mux` on top of the default burn therefore hands back two files
+that differ in exactly that. An audio-only input has no picture until the burn generates
+one, so there the track rides along beside the rendered text on the generated canvas.
+`--srt-only` asked for no video work at all and gets none; the run says so and carries on.
+
+```bash
+$ subtitler run talk.mp4 --soft-mux
+...
+muxed: talk.softsubs.mp4 (a switchable track on the source video)
+
+$ ffprobe -v error -select_streams s -show_entries stream=index,codec_name:stream_tags=language \
+    -of csv talk.softsubs.mp4
+stream,2,mov_text,srp
+```
+
+MP4 carries `mov_text`, which drops all styling; a `.mkv` or `.webm` source is muxed to
+Matroska instead, which carries ASS. The track is keyed on the same text the burn is, so a
+correction typed in the editor re-muxes as well as re-burns.
+
 ## Re-runs are free
 
 Every expensive stage is cached in `<output>/.subtitler/<name>/`, keyed on the content of
@@ -194,10 +292,14 @@ The keys chain, so changing one thing re-does only what depends on it:
 | `--max-line 30` | cues, then the burn |
 | `--denoise afftdn` | denoise, transcribe, cues, burn (the extraction is reused) |
 | `--fix-model` or an edit to the prompt file | the correction pass, then the burn |
+| a correction typed in the editor | the burn (and the soft-muxed track), nothing above it |
 | a different `--model` or device | transcribe onwards |
 | `--start` or `--end` | the cut, then everything after it. **Not the download** |
 | `--srt-only` on a URL that was fetched as video | the download, as audio this time |
 | the input file's bytes | everything |
+
+Stages, in the order `--force` treats as "and everything after": `fetch`, `trim`,
+`extract`, `denoise`, `transcribe`, `cues`, `fix`, `edit`, `burn`, `mux`.
 
 `--force` ignores the cache: bare `--force` for all of it, or `--force transcribe` for one
 stage and everything after it. Deleting the `.subtitler` directory is always safe.
@@ -456,6 +558,11 @@ does batch 32: 6% faster than 16 and 22.5 GB of VRAM against under 16.
 | Pop!_OS 22.04, ffmpeg 4.4.2 | `run FILE --start 0:20 --end 0:50` | 30.0s of the Serbian fixture, burned output exactly 30.0s |
 | Pop!_OS 22.04, no `--extra fetch` | a URL run | `error: downloading a URL needs yt-dlp. fix: uv sync --extra fetch`, and the whole suite still passes |
 | Pop!_OS 22.04 | yt-dlp failure messages | unavailable, 404, and a dead DNS resolver each produce one sentence, verified against real yt-dlp output |
+| Pop!_OS 22.04, Chrome | the cue editor, end to end | picked the Serbian fixture in the page, landed in the editor after 8s, corrected two cues, heard cue 2 through the Listen button (a `206` off `/api/media`), approved, and read the corrected text off a frame pulled out of the burned mp4 |
+| Pop!_OS 22.04, Chrome | the live quality check | a deliberately unreadable correction was marked `3 lines (max 2)` and `28.9 chars/sec exceeds 20.0` as it was typed, and libass rendered exactly the three lines the wrapper chose |
+| Pop!_OS 22.04, RTX 3090 | corrections against the stage cache | survived a `--force cues`, left the burn cached on a second approval, re-burned when the text changed, and were reported and skipped after `--denoise afftdn` moved the transcript |
+| Pop!_OS 22.04, ffmpeg 4.4.2 | `--soft-mux` | `ffprobe` reports stream 2 as `mov_text` tagged `language=srp`, and extracting it back out returns the corrected text |
+| Pop!_OS 22.04, Chrome | a link and a trim window from the page | pasted a YouTube URL with 0:05 to 0:20, watched yt-dlp's progress in the log, landed in the editor with 4 cues starting at `00:00.000`, approved, burned |
 
 The URL row above is [What's Up: June 2026 Skywatching Tips from
 NASA](https://www.youtube.com/watch?v=NtiKxO8xIbY), 229 seconds, from NASA JPL's official

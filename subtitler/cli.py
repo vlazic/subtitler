@@ -107,6 +107,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--burn", action=argparse.BooleanOptionalAction, default=True)
     p_run.add_argument("--soft-mux", action="store_true", help="also mux a subtitle track")
     p_run.add_argument("--srt-only", action="store_true", help="skip all video work")
+    p_run.add_argument(
+        "--review",
+        action="store_true",
+        help=(
+            "write the subtitle files and stop before the video, so the cues can be checked "
+            "or corrected first. `subtitler gui` uses this for its editor"
+        ),
+    )
     p_run.add_argument("--canvas", default="1280x720", help="canvas size for audio-only input")
     p_run.add_argument("--canvas-color", default="0x101010")
     p_run.add_argument(
@@ -162,7 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="STAGE",
         help=(
             "invalidate the stage cache from a stage onwards "
-            "(fetch, trim, extract, denoise, transcribe, cues, fix, burn); "
+            "(fetch, trim, extract, denoise, transcribe, cues, fix, edit, burn, mux); "
             "bare --force means all"
         ),
     )
@@ -319,6 +327,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         burn=args.burn,
         soft_mux=args.soft_mux,
         srt_only=args.srt_only,
+        review=args.review,
         canvas=args.canvas,
         canvas_color=args.canvas_color,
         style_preset=args.style_preset,

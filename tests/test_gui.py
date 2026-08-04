@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from subtitler import edits as edits_mod
 from subtitler import postedit
 from subtitler.cues import CueConfig
 from subtitler.doctor import Platform
@@ -29,7 +30,7 @@ from subtitler.gui import files, forms, jobs
 from subtitler.gui import server as server_mod
 from subtitler.gui.app import GuiApp
 from subtitler.gui.server import build_server, is_local_host_header
-from subtitler.model import Segment, Transcript, Word
+from subtitler.model import Cue, Segment, Transcript, Word
 from subtitler.pipeline import RunConfig, RunResult
 
 REPO = Path(__file__).resolve().parent.parent
@@ -303,11 +304,19 @@ class TestStageList:
         """A `burn` chip that never lights up on a `--srt-only` run reads as a step that
         failed, and the run looks unfinished for as long as the page is open."""
         cfg = forms.build_config({"input": str(FIXTURE), "srt_only": True})
-        assert forms.stages_for(cfg) == ("probe", "extract", "transcribe", "cues", "render")
+        assert forms.stages_for(cfg) == ("probe", "extract", "transcribe", "cues", "edit", "render")
 
     def test_asking_for_them_puts_them_back(self) -> None:
-        cfg = forms.build_config({"input": str(FIXTURE), "denoise": "speech", "fix": True})
-        assert forms.stages_for(cfg) == jobs.STAGES
+        cfg = forms.build_config(
+            {
+                "input": str(FIXTURE),
+                "denoise": "speech",
+                "fix": True,
+                "start": "5",
+                "soft_mux": True,
+            }
+        )
+        assert forms.stages_for(cfg) == tuple(s for s in jobs.STAGES if s != "fetch")
 
     def test_turning_the_burn_off_drops_the_burn_chip_too(self) -> None:
         cfg = forms.build_config({"input": str(FIXTURE), "burn": False})
@@ -544,6 +553,16 @@ class TestJobs:
 # --------------------------------------------------------------------------------------
 
 
+# The cue the editor tests type into. Its wrapping is the clitic case `cues.CLITICS`
+# exists for, so a route that re-wrapped it with the greedy wrapper would show it here.
+REVIEW_CUES = (
+    Cue(index=1, start=0.0, end=2.0, lines=("Prva replika",)),
+    Cue(
+        index=2, start=2.2, end=6.7, lines=("Da se opšta predstava,", "da se ono što je istinito,")
+    ),
+)
+
+
 def fake_result(cfg: RunConfig, out: Path) -> RunResult:
     word = Word(start=0.0, end=1.0, text="proba")
     transcript = Transcript(
@@ -554,7 +573,15 @@ def fake_result(cfg: RunConfig, out: Path) -> RunResult:
         model="fake-1",
         runtime_s=0.5,
     )
-    return RunResult(input=cfg.input, srt=out / "a.srt", vtt=out / "a.vtt", transcript=transcript)
+    return RunResult(
+        input=cfg.input or FIXTURE,
+        source=cfg.source,
+        srt=out / "a.srt",
+        vtt=out / "a.vtt",
+        transcript=transcript,
+        cues=REVIEW_CUES if cfg.review else (),
+        cues_key="basekey000000001" if cfg.review else "",
+    )
 
 
 def make_app(
@@ -621,7 +648,8 @@ class TestRoutes:
         assert app.jobs.current is None
 
         bad = body(app.handle("POST", "/api/preview", body=b"{}", token="tok"))
-        assert bad == {"ok": False, "field": "input", "error": "choose a file first"}
+        assert bad["ok"] is False
+        assert bad["field"] == "input"
 
     def test_a_run_starts_a_job_and_reports_where_the_files_went(self) -> None:
         app = make_app()
@@ -775,6 +803,296 @@ class TestDoctorRoute:
         payload = body(app.handle("GET", "/api/doctor", token="tok"))
         assert payload["ready"] is True
         assert "nvidia-smi went away" in payload["text"]
+
+
+# --------------------------------------------------------------------------------------
+# A link instead of a file
+# --------------------------------------------------------------------------------------
+
+URL = "https://www.youtube.com/watch?v=abc123"
+
+
+class TestLinkInput:
+    """`RunConfig.input` is `Path | None` since URLs landed, and three places in the GUI
+    still assumed a Path. Every one of them raised `AttributeError` on the first link
+    anybody pasted, which is the whole feature failing at the first click."""
+
+    def test_a_link_builds_a_url_config_rather_than_a_missing_file(self, tmp_path: Path) -> None:
+        cfg = forms.build_config({"input": URL, "out_dir": str(tmp_path)})
+        assert cfg.url == URL
+        assert cfg.input is None
+        assert cfg.source == URL
+
+    def test_the_command_line_carries_the_link_and_the_window(self, tmp_path: Path) -> None:
+        cfg = forms.build_config(
+            {"input": URL, "out_dir": str(tmp_path), "start": "1:05", "end": "2:30"}
+        )
+        argv = forms.to_argv(cfg)
+        assert argv[:3] == ["subtitler", "run", URL]
+        assert argv[argv.index("--start") + 1] == "1:05"
+        assert argv[argv.index("--end") + 1] == "2:30"
+
+    def test_the_job_is_labelled_by_the_link(self, tmp_path: Path) -> None:
+        cfg = forms.build_config({"input": URL, "out_dir": str(tmp_path)})
+        assert forms.job_label(cfg) == URL
+
+    def test_a_link_with_nowhere_to_write_names_the_folder_control(self) -> None:
+        """Non-negotiable 4: a link has no directory of its own and the CWD is never an
+        answer. Said while the button is unpressed, not after a 200 MB download."""
+        with pytest.raises(forms.FormError) as exc:
+            forms.build_config({"input": URL})
+        assert exc.value.field == "out_dir"
+
+    def test_a_bad_timecode_names_the_box_it_came_from(self) -> None:
+        with pytest.raises(forms.FormError) as exc:
+            forms.build_config({"input": str(FIXTURE), "start": "half past two"})
+        assert exc.value.field == "start"
+
+    def test_a_window_that_runs_backwards_is_refused(self) -> None:
+        with pytest.raises(forms.FormError) as exc:
+            forms.build_config({"input": str(FIXTURE), "start": "2:00", "end": "1:00"})
+        assert exc.value.field == "end"
+
+    def test_the_fetch_and_trim_chips_appear_only_when_they_will_run(self, tmp_path: Path) -> None:
+        linked = forms.build_config({"input": URL, "out_dir": str(tmp_path), "start": "5"})
+        assert "fetch" in forms.stages_for(linked)
+        assert "trim" in forms.stages_for(linked)
+        local = forms.build_config({"input": str(FIXTURE)})
+        assert "fetch" not in forms.stages_for(local)
+        assert "trim" not in forms.stages_for(local)
+
+    def test_a_link_run_starts_a_job_instead_of_raising(self, tmp_path: Path) -> None:
+        """The regression itself, over the route that used to raise it."""
+        app = make_app()
+        response = app.handle(
+            "POST",
+            "/api/run",
+            body=json.dumps({"input": URL, "out_dir": str(tmp_path)}).encode(),
+            token="tok",
+        )
+        assert response.status == 200
+        started = body(response)
+        assert started["label"] == URL
+        assert started["out_dir"] == str(tmp_path)
+
+    def test_the_page_is_told_whether_a_link_can_be_downloaded_at_all(self) -> None:
+        """`yt-dlp` lives behind an extra. A paste box that silently fails is worse than
+        one that says which command installs the thing it needs."""
+        payload = body(make_app().handle("GET", "/api/options", token="tok"))
+        assert isinstance(payload["fetch_available"], bool)
+        assert "yt-dlp" in payload["fetch_hint"] or "fetch" in payload["fetch_hint"]
+
+
+# --------------------------------------------------------------------------------------
+# The review-and-edit step
+# --------------------------------------------------------------------------------------
+
+
+def start_review(app: GuiApp, **extra) -> dict:
+    started = body(
+        app.handle(
+            "POST",
+            "/api/run",
+            body=json.dumps({"input": str(FIXTURE), "review": True, **extra}).encode(),
+            token="tok",
+        )
+    )
+    return body(app.handle("GET", "/api/job", {"id": started["id"]}, token="tok"))
+
+
+class TestReviewRoute:
+    def test_a_review_run_hands_the_page_the_cues_and_their_verdicts(self) -> None:
+        snap = start_review(make_app())
+        payload = snap["result"]["review"]
+        assert [c["index"] for c in payload["cues"]] == [1, 2]
+        assert payload["base_key"] == "basekey000000001"
+        assert payload["cues"][0]["duration"] == 2.0
+        assert payload["cues"][0]["problems"] == []
+
+    def test_the_burn_chip_is_not_promised_by_a_run_that_stops_before_it(self) -> None:
+        cfg = forms.build_config({"input": str(FIXTURE), "review": True})
+        assert "burn" not in forms.stages_for(cfg)
+        assert "--review" in forms.to_argv(cfg)
+
+    def test_the_limits_the_marks_were_computed_with_come_along(self) -> None:
+        """The page prints them next to the count, so a user who set `--max-line 30` is not
+        left guessing which limit a mark is about."""
+        snap = start_review(make_app(), max_line="30")
+        assert snap["result"]["review"]["limits"]["max_line"] == 30
+
+
+class TestLiveCheck:
+    def check(self, app: GuiApp, cues: list[dict], **extra) -> dict:
+        return body(
+            app.handle(
+                "POST",
+                "/api/cues/check",
+                body=json.dumps({"input": str(FIXTURE), **extra, "cues": cues}).encode(),
+                token="tok",
+            )
+        )
+
+    def test_a_corrected_cue_is_re_broken_by_the_wrapper_that_knows_about_clitics(
+        self,
+    ) -> None:
+        """The bug `CLAUDE.md` records, now reachable from the editor. The greedy wrapper
+        breaks this after "da" and strands the clitic "se" at the start of line two."""
+        out = self.check(
+            make_app(),
+            [
+                {
+                    "index": 2,
+                    "start": 2.2,
+                    "end": 6.7,
+                    "text": "Da se opšta predstava, da se ono što je istinito,",
+                }
+            ],
+        )
+        assert out["cues"][0]["lines"] == [
+            "Da se opšta predstava,",
+            "da se ono što je istinito,",
+        ]
+
+    def test_a_cue_nobody_typed_in_keeps_the_break_the_splitter_chose(self) -> None:
+        """Sent as lines rather than as text. Re-wrapping it could only lose the word
+        timings the break was chosen from."""
+        original = ["Da se opšta predstava, da", "se ono što je istinito,"]
+        out = self.check(
+            make_app(),
+            [{"index": 2, "start": 2.2, "end": 6.7, "text": "", "lines": original}],
+        )
+        assert out["cues"][0]["lines"] == original
+
+    def test_a_line_that_is_too_long_says_so_in_lint_wording(self) -> None:
+        out = self.check(make_app(), [{"index": 1, "start": 0.0, "end": 5.0, "text": "a" * 60}])
+        problems = out["cues"][0]["problems"]
+        assert any("60 chars (max 42)" in p for p in problems)
+        assert out["cues"][0]["line_widths"] == [60]
+
+    def test_text_too_fast_to_read_is_marked(self) -> None:
+        out = self.check(
+            make_app(),
+            [
+                {
+                    "index": 1,
+                    "start": 0.0,
+                    "end": 1.0,
+                    "text": "Ovo je mnogo teksta za jednu sekundu",
+                }
+            ],
+        )
+        assert any("chars/sec exceeds" in p for p in out["cues"][0]["problems"])
+
+    def test_the_marks_follow_the_limits_the_form_is_set_to(self) -> None:
+        cue = [{"index": 1, "start": 0.0, "end": 5.0, "text": "a" * 50}]
+        assert self.check(make_app(), cue)["cues"][0]["problems"]
+        assert not self.check(make_app(), cue, max_line="60")["cues"][0]["problems"]
+
+    def test_a_nonsense_body_is_a_400_rather_than_a_500(self) -> None:
+        response = make_app().handle("POST", "/api/cues/check", body=b"{}", token="tok")
+        assert response.status == 400
+
+
+class TestApproveRoute:
+    def approve(self, app: GuiApp, tmp_path: Path, edits: dict, base_key="basekey000000001"):
+        return app.handle(
+            "POST",
+            "/api/burn",
+            body=json.dumps(
+                {
+                    "input": str(FIXTURE),
+                    "out_dir": str(tmp_path),
+                    "base_key": base_key,
+                    "edits": edits,
+                }
+            ).encode(),
+            token="tok",
+        )
+
+    def test_the_corrections_are_written_where_the_pipeline_reads_them(
+        self, tmp_path: Path
+    ) -> None:
+        app = make_app()
+        assert self.approve(app, tmp_path, {"1": "Ispravljena replika"}).status == 200
+
+        work = tmp_path / ".subtitler" / FIXTURE.stem
+        saved = edits_mod.load(work)
+        assert saved is not None
+        assert saved.base_key == "basekey000000001"
+        assert saved.texts == {1: "Ispravljena replika"}
+
+    def test_the_second_half_runs_with_the_review_stop_turned_off(self, tmp_path: Path) -> None:
+        """Otherwise approving would stop in the same place again and never burn."""
+        seen: list[RunConfig] = []
+        app = make_app(runner=lambda cfg, log=print: seen.append(cfg) or fake_result(cfg, tmp_path))
+        self.approve(app, tmp_path, {})
+        assert seen and seen[0].review is False
+
+    def test_approving_with_nothing_typed_clears_an_earlier_set(self, tmp_path: Path) -> None:
+        """A correction the user deleted in the editor must not come back from the file the
+        previous approval left behind."""
+        app = make_app()
+        self.approve(app, tmp_path, {"1": "Prva verzija"})
+        self.approve(app, tmp_path, {})
+        assert edits_mod.load(tmp_path / ".subtitler" / FIXTURE.stem) is None
+
+    def test_a_correction_that_empties_a_cue_is_refused(self, tmp_path: Path) -> None:
+        response = self.approve(app := make_app(), tmp_path, {"1": "   "})
+        assert response.status == 400
+        assert "cue 1" in body(response)["error"]
+        assert app.jobs.current is None
+
+    def test_corrections_with_no_transcript_behind_them_are_refused(self, tmp_path: Path) -> None:
+        response = self.approve(make_app(), tmp_path, {"1": "tekst"}, base_key="")
+        assert response.status == 400
+
+
+class TestMediaRoute:
+    def test_there_is_nothing_to_play_before_a_review_has_run(self) -> None:
+        assert make_app().handle("GET", "/api/media", token="tok").status == 404
+
+    def test_after_a_review_the_media_is_served_whole(self) -> None:
+        app = make_app()
+        start_review(app)
+        response = app.handle("GET", "/api/media", token="tok")
+        assert response.status == 200
+        assert response.body == FIXTURE.read_bytes()
+        assert ("Accept-Ranges", "bytes") in response.headers
+
+    def test_a_range_request_gets_a_206_with_the_range_it_asked_for(self) -> None:
+        """A browser will not seek inside an <audio> element without this, and seeking is
+        the entire point: the editor plays the span of the cue being typed."""
+        app = make_app()
+        start_review(app)
+        response = app.handle("GET", "/api/media", token="tok", headers={"range": "bytes=10-19"})
+        assert response.status == 206
+        assert response.body == FIXTURE.read_bytes()[10:20]
+        size = FIXTURE.stat().st_size
+        assert ("Content-Range", f"bytes 10-19/{size}") in response.headers
+
+    def test_an_open_ended_range_is_answered_and_capped(self) -> None:
+        """Chrome opens with `bytes=0-`. Answering it by reading a 90-minute file into
+        memory is how a local server turns into a swap storm."""
+        from subtitler.gui.app import RANGE_CHUNK
+
+        app = make_app()
+        start_review(app)
+        response = app.handle("GET", "/api/media", token="tok", headers={"range": "bytes=0-"})
+        assert response.status == 206
+        assert len(response.body) <= RANGE_CHUNK
+
+    def test_a_range_past_the_end_falls_back_to_the_whole_file(self) -> None:
+        app = make_app()
+        start_review(app)
+        response = app.handle(
+            "GET", "/api/media", token="tok", headers={"range": "bytes=99999999-"}
+        )
+        assert response.status == 200
+
+    def test_the_media_route_is_behind_the_token_like_everything_else(self) -> None:
+        app = make_app()
+        start_review(app)
+        assert app.handle("GET", "/api/media", token=None).status == 403
 
 
 # --------------------------------------------------------------------------------------

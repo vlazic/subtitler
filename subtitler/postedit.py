@@ -42,8 +42,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from subtitler.cues import CueConfig, wrap_text, wrap_words
-from subtitler.model import Cue, Segment, synthesize_words
+from subtitler.cues import CueConfig, wrap_edited, wrap_text
+from subtitler.model import Cue
 
 DEFAULT_MODEL = "anthropic/claude-sonnet-5"
 DEFAULT_PROMPT = "postedit"
@@ -342,32 +342,16 @@ def _reflow(lines: tuple[str, ...], tokens: list[str]) -> tuple[str, ...] | None
 def _relayout(text: str, marked: str, cue: Cue, cfg: CueConfig) -> tuple[str, ...]:
     """Re-wrap a corrected cue's text, through the same wrapper the splitter uses.
 
-    Correcting the text changes its length, so the line break has to be recomputed. It has
-    to be recomputed *the same way*, though. Wrapping with the plain greedy `wrap_text`
-    instead of `cues.wrap_words` looked fine and was not: on the Serbian fixture it turned
-
-        Da se opšta predstava,          into    Da se opšta predstava, da
-        da se ono što je istinito,              se ono što je istinito,
-
-    which strands the clitic "se" at the start of line two, the exact break `cues.CLITICS`
-    exists to forbid. `wrap_words` needs word timings, so they are synthesized across the
-    cue's own span: the pause rank never fires on synthesized words, but the clitic,
-    preposition and punctuation rules all do, and those are what was being lost.
-
-    `wrap_text`, which `wrap_words` falls back to, truncates to `max_lines` when the text
-    needs more. That is unreachable in the normal pipeline (the splitter guarantees a chunk
-    fits) and very reachable here, where the model decides how long the text is, so an
-    overflow keeps every line and lets `lint` report it rather than deleting the tail.
+    The wrapping itself is `cues.wrap_edited`, which is shared with the GUI's hand editor
+    and carries the explanation of why the greedy `wrap_text` is the wrong one. What is
+    specific to this module is the markup layer below.
 
     `text` is the markup-free version and `marked` is what actually gets written. The break
     is chosen on `text` and applied to `marked`, because `<b>` and `</b>` are seven
     characters of nothing on a web player: measuring them against `max_line` pushed a
     two-line cue in the gozba fixture onto three lines for emphasis nobody can see.
     """
-    words = synthesize_words(Segment(start=cue.start, end=cue.end, text=text))
-    lines = wrap_words(words, cfg) if words else ()
-    if " ".join(lines) != " ".join(text.split()):
-        lines = wrap_text(text, max_line=cfg.max_line, max_lines=len(text.split()) or 1)
+    lines = wrap_edited(text, start=cue.start, end=cue.end, config=cfg)
     if marked == text:
         return lines
     return _reflow(lines, marked.split()) or wrap_text(

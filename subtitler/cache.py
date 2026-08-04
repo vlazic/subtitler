@@ -14,7 +14,9 @@ The key is a chain, not a flat hash of the command line:
     transcribe <- the audio stage's key (denoise if denoising, else extract)
     cues       <- transcribe's key
     fix        <- cues' key          (Phase 6; the seam is here, unused)
-    burn       <- cues' key + the source content id
+    edit       <- fix's key (or cues') + a digest of the hand corrections
+    burn       <- the text stage's key + the source content id
+    mux        <- the text stage's key + the id of the video the track is attached to
 
 Chaining means a change anywhere invalidates exactly the stages downstream of it and
 nothing else. Switching `--style-preset` re-burns without re-transcribing; switching
@@ -36,6 +38,10 @@ anywhere downstream, and the burn re-encodes the fragment rather than the full-l
 source. Keying it on the source's content id plus the two timecodes is also what makes
 changing `--start` re-cut without re-downloading: `fetch` is upstream of it and its own key
 never mentions a timecode.
+
+`edit` is where hand corrections enter, and its input is a file no stage writes. See
+`edits.py` for why that placement is the only one that lets a correction survive a re-run
+without making it invalidate the transcript-derived artifact it has nothing to do with.
 
 Splitting `denoise` out of `extract` (they were one ffmpeg invocation before) is what makes
 that last case work, and it is also what makes the Phase 7 engine x denoiser matrix extract
@@ -72,7 +78,9 @@ STAGE_ORDER: tuple[str, ...] = (
     "transcribe",
     "cues",
     "fix",
+    "edit",
     "burn",
+    "mux",
 )
 
 # 64 bits of key. A collision needs about 2**32 distinct stage inputs in one work

@@ -39,20 +39,26 @@ class Busy(RuntimeError):
 # without adding a progress protocol to the pipeline for the GUI's benefit.
 
 STAGES: tuple[str, ...] = (
+    "fetch",
+    "trim",
     "probe",
     "extract",
     "denoise",
     "transcribe",
     "cues",
     "fix",
+    "edit",
     "render",
     "burn",
+    "mux",
 )
 
 # First match wins, so the specific prefixes come before the ones they start with:
 # "denoise" before "engine", and "transcrib" catches both "transcribe: cached" and
 # "transcribed: 42 segments".
 _STAGE_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("fetch", "fetch"),
+    ("trim", "trim"),
     ("input:", "probe"),
     ("extract", "extract"),
     ("denoise", "denoise"),
@@ -61,9 +67,13 @@ _STAGE_PREFIXES: tuple[tuple[str, str], ...] = (
     ("transcrib", "transcribe"),
     ("cues:", "cues"),
     ("fix:", "fix"),
+    ("edit:", "edit"),
     ("wrote:", "render"),
     ("lint:", "render"),
+    ("review:", "render"),
     ("burn", "burn"),
+    ("soft-mux", "mux"),
+    ("muxed", "mux"),
 )
 
 
