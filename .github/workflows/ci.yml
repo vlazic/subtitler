@@ -1,0 +1,105 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # macOS is the primary target and the maintainer develops on Linux, so the mac job
+    # runs from the first phase rather than at the end. macos-14 is Apple Silicon.
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            extras: "--extra local --extra cloud --extra dev"
+          - os: macos-14
+            extras: "--extra mlx --extra cloud --extra dev"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fontconfig
+
+      - name: Install ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+
+      - name: Record the ffmpeg build
+        run: |
+          ffmpeg -version | head -1
+          # Everything this project needs must exist on both the 4.4 Ubuntu ships and the
+          # 7.x/8.x Homebrew ships. Failing here beats failing at burn time.
+          ffmpeg -hide_banner -filters  | grep -E '^\s*\S+\s+(ass|subtitles|afftdn|arnndn|anlmdn)\s'
+          ffmpeg -hide_banner -encoders | grep -E '^\s*\S+\s+(libx264|aac)\s'
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync
+        run: uv sync ${{ matrix.extras }}
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Tests
+        run: uv run pytest -v
+
+      - name: CLI smoke test
+        run: |
+          uv run subtitler --version
+          uv run subtitler convert fixtures/groq_verbose.json -o /tmp/fixture.srt
+          uv run subtitler lint /tmp/fixture.srt || true   # Phase 1 cues are known-naive
+
+      - name: Burn smoke test
+        # The end-to-end path that only breaks on someone else's machine: libass, the
+        # bundled font, the filter literal, and the yuv420p/duration flags.
+        run: |
+          uv run subtitler burn fixtures/tiny-10s.wav /tmp/fixture.srt -o /tmp/smoke.mp4
+          ffprobe -v error -show_entries stream=width,height,pix_fmt -of default=nw=1 /tmp/smoke.mp4
+          test -s /tmp/smoke.mp4
+
+      - name: Burn with a hostile path
+        # Spaces, a colon and a quote in both the directory and the filename. This is the
+        # acceptance test for writing subs.ass into a temp dir and running ffmpeg with cwd
+        # set there instead of escaping a real path into the filtergraph.
+        run: |
+          mkdir -p "/tmp/a dir: with 'quotes'"
+          cp fixtures/tiny-10s.wav "/tmp/a dir: with 'quotes'/a file: with 'quotes'.wav"
+          uv run subtitler burn "/tmp/a dir: with 'quotes'/a file: with 'quotes'.wav" \
+            /tmp/fixture.srt -o "/tmp/a dir: with 'quotes'/out: file.mp4"
+          test -s "/tmp/a dir: with 'quotes'/out: file.mp4"
+
+      - name: Render the diacritics frame
+        # č ć đ š ž must come out of the bundled font identically on both platforms.
+        # Phase 4 turns this into a pixel diff against a checked-in reference.
+        run: |
+          printf '1\n00:00:01,000 --> 00:00:04,000\nČĆĐŠŽ čćđšž\n' > /tmp/diacritics.srt
+          uv run subtitler burn fixtures/tiny-10s.wav /tmp/diacritics.srt -o /tmp/diacritics.mp4
+          ffmpeg -v error -y -ss 2 -i /tmp/diacritics.mp4 -frames:v 1 /tmp/diacritics.png
+          test -s /tmp/diacritics.png
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: render-${{ matrix.os }}
+          path: |
+            /tmp/diacritics.png
+            /tmp/smoke.mp4
+          if-no-files-found: warn

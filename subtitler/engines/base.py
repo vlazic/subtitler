@@ -1,0 +1,141 @@
+"""The one interface every transcription backend implements.
+
+Also the home of the shared decode hygiene. The three constants below were learned the hard
+way in `record-audio` and are absent from every earlier pipeline in this lineage; they are
+applied by every adapter rather than reimplemented per engine.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Protocol, runtime_checkable
+
+from subtitler.model import Transcript
+
+# Verbatim from gozba2/emisije/transcribe-audio.sh. Proven on this material; do not
+# reword it without a benchmark run showing the change helps.
+#
+# Note the tension worth knowing about: "do not split sentences across lines" is right for
+# a sidecar transcript and is exactly what cues.py then undoes for burn-in. The prompt
+# steers recognition; cue layout is decided afterwards, from word timings.
+SERBIAN_PROMPT = (
+    "Nemoj deliti rečenice u više redova. "
+    "Zadrži srpski jezik i latinično pismo. "
+    "Koristi ispravna imena za ljude, knjige, filozofske škole itd."
+)
+
+# Whisper hallucinates filler ("Hvala.", "Thank you.", "Titlovi ...") over silence. Dropping
+# silent spans outright beats filtering the hallucination afterwards, because by then it has
+# already consumed a timestamp range and skewed the segment boundaries around it.
+SILENT_PEAK_DBFS = -60.0
+
+# Decoder repetition loops: the same short phrase emitted over and over.
+MAX_REPEATS = 6
+MAX_REPEAT_PHRASE_TOKENS = 8
+
+RANDOM_SEED = 20260101
+
+
+class EngineUnavailable(RuntimeError):
+    """An engine was asked for but cannot run here. Always carries an actionable fix."""
+
+    def __init__(self, engine: str, reason: str, fix: str = "") -> None:
+        message = f"engine {engine!r} is unavailable: {reason}"
+        if fix:
+            message += f"\n  fix: {fix}"
+        super().__init__(message)
+        self.engine = engine
+        self.reason = reason
+        self.fix = fix
+
+
+@dataclass(frozen=True, slots=True)
+class Availability:
+    ok: bool
+    reason: str = ""
+    fix: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ModelInfo:
+    name: str
+    revision: str = ""
+    path: Path | None = None
+    size_bytes: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TranscribeOptions:
+    language: str = "sr"
+    initial_prompt: str | None = SERBIAN_PROMPT
+    temperature: float = 0.0
+    beam_size: int = 5
+    word_timestamps: bool = True
+    # Off by default: conditioning on previous text is the main driver of repetition loops
+    # and of one bad segment poisoning everything after it.
+    condition_on_previous_text: bool = False
+    compression_ratio_threshold: float | None = 2.4
+    vad: bool = True
+    seed: int = RANDOM_SEED
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+@runtime_checkable
+class Engine(Protocol):
+    name: str
+    kind: str  # "local" | "cloud"
+
+    def availability(self) -> Availability: ...
+
+    def ensure_model(self, progress: Any = None) -> ModelInfo: ...
+
+    def transcribe(self, audio: Path, opts: TranscribeOptions) -> Transcript: ...
+
+    def describe(self) -> dict[str, Any]: ...
+
+
+# --------------------------------------------------------------------------------------
+# Shared post-decode hygiene
+# --------------------------------------------------------------------------------------
+
+
+def collapse_repetition(
+    text: str,
+    *,
+    max_repeats: int = MAX_REPEATS,
+    max_phrase_tokens: int = MAX_REPEAT_PHRASE_TOKENS,
+) -> str:
+    """Collapse a phrase repeated more than `max_repeats` times in a row.
+
+    Scans phrase lengths from longest to shortest so "ne znam ne znam ne znam" collapses as
+    one two-word phrase rather than as two separate single-word runs.
+    """
+    tokens = text.split()
+    if len(tokens) < max_repeats:
+        return text
+
+    for size in range(max_phrase_tokens, 0, -1):
+        i = 0
+        out: list[str] = []
+        changed = False
+        while i < len(tokens):
+            phrase = tokens[i : i + size]
+            if len(phrase) < size:
+                out.extend(tokens[i:])
+                break
+            repeats = 1
+            j = i + size
+            while tokens[j : j + size] == phrase:
+                repeats += 1
+                j += size
+            if repeats > max_repeats:
+                out.extend(phrase)
+                changed = True
+                i = j
+            else:
+                out.extend(tokens[i : i + size])
+                i += size
+        if changed:
+            tokens = out
+    return " ".join(tokens)

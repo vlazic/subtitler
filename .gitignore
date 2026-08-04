@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# uv.lock IS committed: the friend should install the exact versions that were
+# benchmarked, and CI should not break from an unrelated upstream release.
+
+# Secrets
+.env
+
+# Pipeline artifacts
+.subtitler/
+out/
+*.subbed.mp4
+
+# Benchmark outputs are committed on purpose; scratch runs are not.
+benchmarks/results/scratch*/
+
+# Large media that is not a checked-in fixture
+benchmarks/clips/*.mp4
+benchmarks/clips/*.mov

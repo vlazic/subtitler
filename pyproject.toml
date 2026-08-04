@@ -1,0 +1,58 @@
+[project]
+name = "subtitler"
+version = "0.1.0"
+description = "Audio or video in, burned-in subtitles out. Local-first, macOS and Linux."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Vladimir Lazic" }]
+keywords = ["subtitles", "whisper", "transcription", "srt", "vtt", "ffmpeg"]
+
+# Core stays deliberately thin: stdlib plus ffmpeg invoked as a subprocess.
+# Everything heavy lives behind an extra so `uv sync` on a fresh Mac is fast.
+dependencies = [
+  "huggingface-hub>=0.24",
+]
+
+[project.optional-dependencies]
+# macOS Apple Silicon only. Never a hard dependency: there are no Linux wheels.
+mlx = ["mlx-whisper>=0.4"]
+# Linux, Intel Mac, or any CPU box.
+local = ["faster-whisper>=1.1", "numpy>=1.24"]
+# CTranslate2 wheels want CUDA 12 even when the driver ships 13.
+cuda = ["nvidia-cublas-cu12", "nvidia-cudnn-cu12>=9,<10"]
+cloud = ["groq>=0.12"]
+fix = ["litellm>=1.50"]
+# Benchmark-only denoisers, ported from gozba2/py/test.py. Not a runtime dep:
+# the CLI denoises with ffmpeg filters instead.
+denoise = ["noisereduce>=3.0", "librosa>=0.10", "soundfile>=0.12", "numpy>=1.24"]
+bench = ["jiwer>=3.0"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+subtitler = "subtitler.cli:main"
+
+[project.urls]
+Repository = "https://github.com/vlazic/subtitler"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["subtitler"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"subtitler/assets" = "subtitler/assets"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
