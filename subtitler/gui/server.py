@@ -8,6 +8,7 @@ read: bind loopback, mint a token, hand the URL to the browser, and translate be
 from __future__ import annotations
 
 import secrets
+import shutil
 import sys
 import threading
 import webbrowser
@@ -21,6 +22,11 @@ from subtitler.gui.app import GuiApp, Response
 
 DEFAULT_HOST = "127.0.0.1"
 TOKEN_HEADER = "X-Subtitler-Token"
+
+# How much of a `Response.body_file` is held at once on its way to the socket. The number
+# is not tuned for throughput, only for the property that it does not depend on the file:
+# a 3 GB recording and a 3 MB one cost the same here.
+STREAM_CHUNK = 256 * 1024
 
 _LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "0.0.0.0"})
 
@@ -80,14 +86,20 @@ class _Handler(BaseHTTPRequestHandler):
     def _send(self, response: Response) -> None:
         self.send_response(response.status)
         self.send_header("Content-Type", response.content_type)
-        self.send_header("Content-Length", str(len(response.body)))
+        self.send_header("Content-Length", str(response.length))
         for name, value in response.headers:
             self.send_header(name, value)
         # The page is regenerated on every launch during development and must never be
         # served from a stale cache after an upgrade.
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(response.body)
+        if response.body_file is None:
+            self.wfile.write(response.body)
+            return
+        # A whole-file media response. Copied in fixed pieces so that the peak memory of
+        # answering it is a property of STREAM_CHUNK and not of the recording's length.
+        with response.body_file.open("rb") as handle:
+            shutil.copyfileobj(handle, self.wfile, STREAM_CHUNK)
 
     def log_message(self, fmt: str, *args: Any) -> None:
         """Silence the per-request access log.

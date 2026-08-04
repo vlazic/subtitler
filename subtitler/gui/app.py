@@ -36,7 +36,20 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 # 90-minute lecture never reads the whole file into this process's memory. Answering with
 # fewer bytes than were asked for is what the range machinery is for; the browser simply
 # asks again for the rest.
+#
+# It caps only the ranged path. A request with no usable Range header has no range to cap,
+# so that one is answered from `Response.body_file` and never lands in memory at all; see
+# `_media`. Capping was trivially bypassed by omitting the header, and a 300 MB file with no
+# Range took this process from 35 MB of RSS to 323 MB.
 RANGE_CHUNK = 4 * 1024 * 1024
+
+# What a Range header turned out to be, for the three cases that are not one span of bytes.
+# RFC 9110 answers them differently and so does `_media`: a header this server cannot parse
+# MAY be ignored and the whole representation sent, while one that parses and asks for bytes
+# that are not there MUST be a 416 rather than a 200 carrying the entire file.
+RANGE_ABSENT = "absent"
+RANGE_MALFORMED = "malformed"
+RANGE_UNSATISFIABLE = "unsatisfiable"
 
 Opener = Callable[[Sequence[str]], None]
 
@@ -49,6 +62,16 @@ class Response:
     # Extra headers, which only the media route needs: a browser will not seek inside an
     # <audio> element unless the server answers ranges.
     headers: tuple[tuple[str, str], ...] = ()
+    # A file to send instead of `body`, copied to the socket in fixed-size pieces by
+    # `server._send`. The whole point is that its size never appears in this process's
+    # memory, so it is the only honest way to answer a request for a 3 GB recording.
+    # `body` stays empty when this is set and is what every other route uses.
+    body_file: Path | None = None
+
+    @property
+    def length(self) -> int:
+        """The Content-Length this response will carry, whichever way the bytes arrive."""
+        return self.body_file.stat().st_size if self.body_file is not None else len(self.body)
 
 
 def _json(payload: Any, status: int = 200) -> Response:
@@ -405,6 +428,19 @@ class GuiApp:
         Range requests are answered because a browser will not seek inside an <audio>
         element without them, and seeking is the entire feature: the editor plays the span
         of the cue being typed, which is the only way to judge "too fast to read".
+
+        The three ways a request can fail to name one span of bytes are three different
+        answers, and collapsing them into "send the whole file" is how `RANGE_CHUNK` came to
+        cap nothing at all:
+
+        * **No Range header.** Send the whole representation, as a 200. Every byte of it,
+          but from `body_file`, so a three-hour recording costs a socket buffer rather than
+          its own size in RSS.
+        * **A Range this server cannot parse.** RFC 9110 permits ignoring it, so it gets the
+          same 200. A player that receives bytes is a player that works.
+        * **A Range that parses and asks for bytes past the end.** 416, with
+          `Content-Range: bytes */SIZE` so the client learns the real length. Answering that
+          one with a 200 and the entire file is exactly the bypass being closed.
         """
         target = self._review_media
         if target is None or not target.is_file():
@@ -413,8 +449,15 @@ class GuiApp:
         size = target.stat().st_size
         kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         span = _parse_range(headers.get("range", ""), size)
-        if span is None:
-            return Response(200, target.read_bytes(), kind, (("Accept-Ranges", "bytes"),))
+        if span == RANGE_UNSATISFIABLE:
+            return Response(
+                416,
+                b"",
+                kind,
+                (("Accept-Ranges", "bytes"), ("Content-Range", f"bytes */{size}")),
+            )
+        if isinstance(span, str):  # RANGE_ABSENT or RANGE_MALFORMED
+            return Response(200, b"", kind, (("Accept-Ranges", "bytes"),), body_file=target)
 
         start, end = span
         with target.open("rb") as handle:
@@ -473,29 +516,44 @@ class GuiApp:
         return _json({"ok": True, "argv": list(argv)})
 
 
-def _parse_range(header: str, size: int) -> tuple[int, int] | None:
-    """`bytes=START-END` to an inclusive, clamped, capped span. None means "send it all".
+def _parse_range(header: str, size: int) -> tuple[int, int] | str:
+    """`bytes=START-END` to an inclusive, clamped, capped span, or why it is not one.
 
     Only the single-range form is handled, which is the only one a media element sends.
-    Anything unparseable falls back to the whole file rather than a 416, because a player
-    that gets bytes is a player that works.
+    The three non-span outcomes come back as `RANGE_ABSENT`, `RANGE_MALFORMED` and
+    `RANGE_UNSATISFIABLE` rather than as one `None`, because `_media` owes each of them a
+    different answer and one shared `None` meant the whole file for all three.
     """
     value = (header or "").strip().lower()
-    if not value.startswith("bytes=") or "," in value or size <= 0:
-        return None
+    if not value:
+        return RANGE_ABSENT
+    if size <= 0:
+        # Nothing to take a range of. Not the client's fault, so not a 416.
+        return RANGE_ABSENT
+    if not value.startswith("bytes=") or "," in value:
+        return RANGE_MALFORMED
     first, _, last = value[len("bytes=") :].partition("-")
     try:
         if first == "":
-            # A suffix range: the last N bytes.
+            # A suffix range: the last N bytes. `bytes=-0` asks for nothing, which is the
+            # one suffix form RFC 9110 calls unsatisfiable.
             length = int(last)
+            if length <= 0:
+                return RANGE_UNSATISFIABLE
             start, end = max(size - length, 0), size - 1
         else:
             start = int(first)
             end = int(last) if last else size - 1
     except ValueError:
-        return None
-    if start >= size or start < 0 or end < start:
-        return None
+        return RANGE_MALFORMED
+    if start < 0:
+        return RANGE_MALFORMED
+    # Asked for before checking end against start, because an open-ended `bytes=N-` past the
+    # end of the file has `end` defaulted to size-1 and would otherwise read as backwards.
+    if start >= size:
+        return RANGE_UNSATISFIABLE
+    if end < start:
+        return RANGE_MALFORMED
     end = min(end, size - 1, start + RANGE_CHUNK - 1)
     return start, end
 

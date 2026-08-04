@@ -1051,12 +1051,22 @@ class TestMediaRoute:
     def test_there_is_nothing_to_play_before_a_review_has_run(self) -> None:
         assert make_app().handle("GET", "/api/media", token="tok").status == 404
 
-    def test_after_a_review_the_media_is_served_whole(self) -> None:
+    def test_after_a_review_the_media_is_served_whole_but_never_read_into_memory(self) -> None:
+        """Regression: a request with no Range header answered with `target.read_bytes()`,
+        so the peak memory of playing a recording was the recording's own size. A 300 MB
+        file took this process from 35 MB of RSS to 328 MB; `RANGE_CHUNK` capped only the
+        ranged path and was bypassed by leaving the header out.
+
+        The whole file is still the right answer. It arrives from `body_file`, which
+        `server._send` copies to the socket in fixed pieces.
+        """
         app = make_app()
         start_review(app)
         response = app.handle("GET", "/api/media", token="tok")
         assert response.status == 200
-        assert response.body == FIXTURE.read_bytes()
+        assert response.body == b""
+        assert response.body_file == FIXTURE
+        assert response.length == FIXTURE.stat().st_size
         assert ("Accept-Ranges", "bytes") in response.headers
 
     def test_a_range_request_gets_a_206_with_the_range_it_asked_for(self) -> None:
@@ -1081,13 +1091,51 @@ class TestMediaRoute:
         assert response.status == 206
         assert len(response.body) <= RANGE_CHUNK
 
-    def test_a_range_past_the_end_falls_back_to_the_whole_file(self) -> None:
+    def test_a_range_past_the_end_is_a_416_and_not_the_whole_file(self) -> None:
+        """Regression: this answered 200 with every byte of the file. `_parse_range` gave
+        one `None` for absent, malformed and unsatisfiable alike, and `_media` read that as
+        "send it all", which is how a request for bytes that do not exist became the most
+        expensive answer this server can give."""
         app = make_app()
         start_review(app)
+        size = FIXTURE.stat().st_size
         response = app.handle(
             "GET", "/api/media", token="tok", headers={"range": "bytes=99999999-"}
         )
+        assert response.status == 416
+        assert response.body == b""
+        assert response.body_file is None
+        assert ("Content-Range", f"bytes */{size}") in response.headers
+
+    def test_a_range_this_server_cannot_parse_is_ignored_rather_than_refused(self) -> None:
+        """The third case, and the one that stays a 200: RFC 9110 permits ignoring a Range
+        header that does not parse, and a player that receives bytes is a player that
+        works. Streamed, so ignoring it still costs no memory."""
+        app = make_app()
+        start_review(app)
+        response = app.handle("GET", "/api/media", token="tok", headers={"range": "kilobytes=0-9"})
         assert response.status == 200
+        assert response.body_file == FIXTURE
+
+    def test_the_three_non_span_outcomes_are_told_apart(self) -> None:
+        from subtitler.gui.app import (
+            RANGE_ABSENT,
+            RANGE_MALFORMED,
+            RANGE_UNSATISFIABLE,
+            _parse_range,
+        )
+
+        size = 1000
+        assert _parse_range("", size) == RANGE_ABSENT
+        assert _parse_range("bytes=abc-def", size) == RANGE_MALFORMED
+        assert _parse_range("bytes=0-9,20-29", size) == RANGE_MALFORMED
+        assert _parse_range("bytes=100-50", size) == RANGE_MALFORMED
+        assert _parse_range("bytes=5000-", size) == RANGE_UNSATISFIABLE
+        assert _parse_range("bytes=-0", size) == RANGE_UNSATISFIABLE
+        assert _parse_range("bytes=10-19", size) == (10, 19)
+        # An open-ended range past the end is unsatisfiable, not backwards: `end` defaults
+        # to size-1 and would read as smaller than `start` if the order of checks slipped.
+        assert _parse_range("bytes=5000-6000", size) == RANGE_UNSATISFIABLE
 
     def test_the_media_route_is_behind_the_token_like_everything_else(self) -> None:
         app = make_app()
@@ -1201,6 +1249,31 @@ class TestOverHttp:
             snapshot = json.loads(response.read())
         assert snapshot["status"] == "done"
         assert snapshot["result"]["srt"] == "/tmp/a.srt"
+
+    def test_a_streamed_media_response_arrives_whole_and_declares_its_length(self, server) -> None:
+        """The other half of serving the no-Range path from `body_file`: bounding the memory
+        is worthless if the browser then gets a truncated file or no Content-Length to seek
+        against. Only this class can check that, because the copying lives in `server._send`.
+        """
+        base, app = server
+        start_review(app)
+        size = FIXTURE.stat().st_size
+        with self._get(f"{base}/api/media") as response:
+            assert response.status == 200
+            assert int(response.headers["Content-Length"]) == size
+            assert response.headers["Accept-Ranges"] == "bytes"
+            assert response.read() == FIXTURE.read_bytes()
+
+    def test_an_unsatisfiable_range_is_a_416_over_the_wire(self, server) -> None:
+        base, app = server
+        start_review(app)
+        request = urllib.request.Request(f"{base}/api/media")
+        request.add_header("X-Subtitler-Token", "tok")
+        request.add_header("Range", "bytes=99999999-")
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(request, timeout=10)
+        assert exc.value.code == 416
+        assert exc.value.headers["Content-Range"] == f"bytes */{FIXTURE.stat().st_size}"
 
 
 # --------------------------------------------------------------------------------------
