@@ -40,7 +40,8 @@ primary target**, Linux is the development platform.
 | Path | What |
 |---|---|
 | `subtitler/cli.py` | argparse entrypoint, subcommands only, no logic |
-| `subtitler/pipeline.py` | stage orchestration and the stage cache |
+| `subtitler/pipeline.py` | stage orchestration |
+| `subtitler/cache.py` | the content-addressed stage cache and `--force` |
 | `subtitler/media.py` | ffprobe/ffmpeg: probe, extract, denoise, split long inputs |
 | `subtitler/model.py` | `Word`, `Segment`, `Cue`, `Transcript` and their JSON |
 | `subtitler/engines/` | one adapter per transcription backend behind `base.Engine` |
@@ -70,7 +71,17 @@ primary target**, Linux is the development platform.
   refuse the file, and the target user is on a Mac.
 - ASS colors are `&HAABBGGRR`, byte order reversed from RGBA. Use `rgba_to_ass()`.
 - Filter path escaping is avoided entirely: write `subs.ass` into a temp dir and run ffmpeg
-  with `cwd` set there. Do not try to escape a real path into a filtergraph.
+  with `cwd` set there. Do not try to escape a real path into a filtergraph. **`arnndn=m=`
+  takes a path too**, and gets the identical treatment in `media.denoise_audio`: the
+  bundled model is copied to `rnnoise.rnnn` in a temp cwd. Any future filter that takes a
+  filename goes the same way.
+- **A stage's cache params must contain everything that changes its output and nothing
+  that does not.** Too little serves a stale artifact; too much means the cache never
+  hits. `transcribe` keys on `engine.describe()`, not on `--model`, because int8 on CPU and
+  float16 on CUDA are different transcripts from the same model name.
+- Denoise is a **separate ffmpeg pass** from extraction, not an extra `-af` on it. Folding
+  them back together would put the denoiser in the extraction's cache key, so changing
+  `--denoise` would demux a 3 GB source again instead of filtering the WAV already on disk.
 - `/etc/os-release` on this dev box is `ID=pop`, `ID_LIKE="ubuntu debian"`. Match on both.
 - Current Claude models reject `temperature`/`top_p`/`top_k` with a 400. `postedit.py` must
   not send sampling parameters unless the user asks explicitly.

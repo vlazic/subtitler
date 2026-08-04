@@ -14,6 +14,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 # ffmpeg 4.4 is what Ubuntu 22.04 ships; Homebrew ships 7.x/8.x. Every flag used anywhere
 # in this project must work on both, so the floor is 4.4 and the code branches where the
@@ -35,6 +36,14 @@ DENOISE_FILTERS: dict[str, str] = {
     "anlmdn": "anlmdn",
     "speech": "highpass=f=80,afftdn=nf=-25,loudnorm",
 }
+
+# The bundled RNNoise weights. `arnndn` cannot run without a model file, and requiring the
+# user to find one would make the preset a lie. See assets/rnnoise/README.md for provenance.
+RNNOISE_MODEL = Path(__file__).parent / "assets" / "rnnoise" / "sh.rnnn"
+
+# The name the model is copied to inside the temp working directory. Fixed, ASCII, no
+# colon: see `denoise_audio`.
+RNNOISE_LOCAL_NAME = "rnnoise.rnnn"
 
 
 class MediaError(RuntimeError):
@@ -76,20 +85,27 @@ def probe_cmd(src: Path) -> list[str]:
     ]
 
 
-def extract_audio_cmd(
-    src: Path, dst: Path, *, denoise: str = "none", rnnoise_model: Path | None = None
-) -> list[str]:
-    """Extract a canonical 16 kHz mono PCM WAV, optionally denoising on the way.
+def extract_audio_cmd(src: Path, dst: Path) -> list[str]:
+    """Extract a canonical 16 kHz mono PCM WAV.
 
     Always mono: the earlier code in gozba2 asked ffmpeg for stereo and then let librosa
     silently downmix, which wasted the work and made the two halves of the pipeline
     disagree about the channel layout.
+
+    Denoising deliberately does *not* happen here. It used to, as one extra `-af` on this
+    same command, but that made the denoiser choice part of the extraction's cache key, so
+    changing `--denoise` demuxed the source video all over again. As a separate pass over a
+    16 kHz mono WAV it costs about a second, and every denoiser gets to reuse one extraction.
     """
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-v", "error", "-i", str(src), "-vn"]
-    filt = denoise_filter(denoise, rnnoise_model)
-    if filt:
-        cmd += ["-af", filt]
-    cmd += [
+    return [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-v",
+        "error",
+        "-i",
+        str(src),
+        "-vn",
         "-ac",
         str(TARGET_CHANNELS),
         "-ar",
@@ -98,7 +114,38 @@ def extract_audio_cmd(
         "pcm_s16le",
         str(dst),
     ]
-    return cmd
+
+
+def denoise_cmd(
+    src: Path, dst: Path, *, preset: str, rnnoise_model: Path | None = None
+) -> list[str]:
+    """Filter an extracted WAV through a denoise preset, staying in the canonical shape.
+
+    `-ac`/`-ar` are re-stated rather than assumed: the `speech` preset ends in `loudnorm`,
+    which resamples to 192 kHz internally, and without them that rate would reach the file.
+    """
+    filt = denoise_filter(preset, rnnoise_model)
+    if not filt:
+        raise MediaError(f"denoise preset {preset!r} is a no-op; do not run a pass for it")
+    return [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-v",
+        "error",
+        "-i",
+        str(src),
+        "-vn",
+        "-af",
+        filt,
+        "-ac",
+        str(TARGET_CHANNELS),
+        "-ar",
+        str(TARGET_SR),
+        "-c:a",
+        "pcm_s16le",
+        str(dst),
+    ]
 
 
 def denoise_filter(name: str, rnnoise_model: Path | None = None) -> str:
@@ -109,8 +156,10 @@ def denoise_filter(name: str, rnnoise_model: Path | None = None) -> str:
     if "{rnnoise_model}" in template:
         if rnnoise_model is None:
             raise MediaError("the arnndn preset needs an rnnoise model file")
-        # ffmpeg filter options are colon separated, so a path with a colon would split the
-        # option. Callers pass a temp-dir-relative path for exactly this reason.
+        # ffmpeg filter options are colon separated, so a real path would split the option
+        # the moment it contained a colon, and there is no escaping that survives shell,
+        # filtergraph and filter-option parsing intact. Callers pass the fixed relative
+        # name the model was copied to inside a temp cwd. See `denoise_audio`.
         return template.format(rnnoise_model=str(rnnoise_model))
     return template
 
@@ -200,16 +249,53 @@ def _parse_fps(rate: str | None) -> float | None:
         return None
 
 
-def extract_audio(
+def extract_audio(src: Path, dst: Path, *, dry_run: bool = False) -> Path:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    run(extract_audio_cmd(src, dst), dry_run=dry_run)
+    return dst
+
+
+def denoise_audio(
     src: Path,
     dst: Path,
     *,
-    denoise: str = "none",
+    preset: str,
     rnnoise_model: Path | None = None,
     dry_run: bool = False,
 ) -> Path:
+    """Run one denoise preset over an extracted WAV.
+
+    `arnndn` takes a model *path* as a filter option, and filter options are colon
+    separated, so the moment the path contains a colon the filtergraph splits in the wrong
+    place. This is the same problem `burn.py` has with `ass=f=...`, and it gets the same
+    answer: copy the model into a temp directory under a fixed ASCII name, run ffmpeg with
+    `cwd` set there, and reference the relative name. Input and output stay as argv entries
+    where no parsing beyond the shell applies, and there is no shell. No escaping is
+    attempted, because no escaping is correct for all three parsers at once.
+    """
+    if preset not in DENOISE_FILTERS:
+        raise MediaError(
+            f"unknown denoise preset {preset!r}; choose from {sorted(DENOISE_FILTERS)}"
+        )
     dst.parent.mkdir(parents=True, exist_ok=True)
-    run(extract_audio_cmd(src, dst, denoise=denoise, rnnoise_model=rnnoise_model), dry_run=dry_run)
+
+    if "{rnnoise_model}" not in DENOISE_FILTERS[preset]:
+        run(denoise_cmd(src, dst, preset=preset), dry_run=dry_run)
+        return dst
+
+    model = rnnoise_model or RNNOISE_MODEL
+    if not model.exists():
+        raise MediaError(
+            f"the arnndn preset needs an rnnoise model and {model} is missing; "
+            "reinstall subtitler, or pick another --denoise preset"
+        )
+    with TemporaryDirectory(prefix="subtitler-denoise-") as tmp:
+        work = Path(tmp)
+        shutil.copyfile(model, work / RNNOISE_LOCAL_NAME)
+        cmd = denoise_cmd(
+            src.resolve(), dst.resolve(), preset=preset, rnnoise_model=Path(RNNOISE_LOCAL_NAME)
+        )
+        run(cmd, cwd=work, dry_run=dry_run)
     return dst
 
 

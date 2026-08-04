@@ -142,6 +142,48 @@ jobs:
           echo "--- transcript ---"
           cat /tmp/local/tiny-10s.srt
 
+      - name: Stage cache
+        # PRD acceptance 6: a re-run hits the cache and produces identical output. The
+        # timing is printed rather than asserted on, because a two-second bound on a
+        # shared CI runner is a flaky test, not a stronger one. What IS asserted is
+        # deterministic: which stages reported a hit, and that the bytes did not move.
+        # (Measured on the dev box: 83.9s cold, 0.52s warm, on 109s of Serbian audio.)
+        run: |
+          cp /tmp/local/tiny-10s.srt /tmp/cache-before.srt
+          time uv run subtitler run fixtures/tiny-10s.wav --model tiny --srt-only \
+            -o /tmp/local --json > /tmp/cache.json
+          cat /tmp/cache.json
+          python -c "import json,sys; h=set(json.load(open('/tmp/cache.json'))['cached_stages']); w={'extract','transcribe','cues'}; sys.exit(0 if w<=h else f'expected {w} cached, got {h}')"
+          cmp /tmp/cache-before.srt /tmp/local/tiny-10s.srt
+
+      - name: Stage cache invalidation
+        # --force transcribe must take the cues with it. A run that kept cues computed
+        # from the previous transcript is internally inconsistent, which is worse than
+        # slow.
+        run: |
+          uv run subtitler run fixtures/tiny-10s.wav --model tiny --srt-only \
+            -o /tmp/local --force transcribe --json > /tmp/forced.json
+          cat /tmp/forced.json
+          python -c "import json,sys; h=set(json.load(open('/tmp/forced.json'))['cached_stages']); sys.exit(0 if h=={'extract'} else f'expected only extract cached, got {h}')"
+          cmp /tmp/cache-before.srt /tmp/local/tiny-10s.srt
+
+      - name: Denoise presets
+        # Every preset must run end to end on both ffmpeg 7.x (Linux) and 8.x (Homebrew),
+        # and arnndn must find its bundled model. A preset that only exists in --help is
+        # not a preset.
+        run: |
+          for d in afftdn arnndn anlmdn speech; do
+            echo "--- $d"
+            work="/tmp/dn-$d/.subtitler/tiny-10s"
+            uv run subtitler run fixtures/tiny-10s.wav --model tiny --srt-only \
+              --denoise "$d" -o "/tmp/dn-$d"
+            test -s "$work/denoise.wav"
+            if cmp -s "$work/extract.wav" "$work/denoise.wav"; then
+              echo "$d produced audio identical to no denoising"
+              exit 1
+            fi
+          done
+
       - name: Render the diacritics frame
         # č ć đ š ž must come out of the bundled font identically on both platforms.
         # Phase 4 turns this into a pixel diff against a checked-in reference.

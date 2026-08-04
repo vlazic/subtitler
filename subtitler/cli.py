@@ -87,7 +87,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--fix", action="store_true", help="run the LLM correction pass")
     p_run.add_argument("--fix-model", default="anthropic/claude-sonnet-5", help="LiteLLM model id")
     p_run.add_argument("--auto-download", action="store_true", help="fetch a missing model")
-    p_run.add_argument("--force", nargs="?", const="all", help="invalidate the cache from a stage")
+    p_run.add_argument(
+        "--force",
+        nargs="?",
+        const="all",
+        metavar="STAGE",
+        help=(
+            "invalidate the stage cache from a stage onwards "
+            "(extract, denoise, transcribe, cues, fix, burn); bare --force means all"
+        ),
+    )
     p_run.add_argument("--dry-run", action="store_true", help="print commands, execute nothing")
     p_run.add_argument("--json", action="store_true", help="machine-readable summary on stdout")
 
@@ -175,6 +184,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             max_dur=args.max_dur,
             max_cps=args.max_cps,
         ),
+        force=args.force,
         dry_run=args.dry_run,
         verbose=args.verbose,
     )

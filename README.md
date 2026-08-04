@@ -47,7 +47,9 @@ subtitler run INPUT.m4a --canvas 1920x1080    # audio-only input gets a video ca
 subtitler run INPUT.mp4 --srt-only            # sidecar files, no video work
 subtitler run INPUT.mp4 --style-preset box    # outline | box | minimal
 subtitler run INPUT.mp4 --engine groq         # cloud instead of local
+subtitler run INPUT.mp4 --denoise speech      # none | afftdn | arnndn | anlmdn | speech
 subtitler run INPUT.mp4 --fix                 # optional LLM correction pass
+subtitler run INPUT.mp4 --force transcribe    # ignore the cache from a stage onwards
 
 subtitler doctor [--install]                  # check and install system dependencies
 subtitler models list | download | path | rm
@@ -55,6 +57,47 @@ subtitler burn VIDEO SUBS -o OUT [--preview]  # re-style without re-transcribing
 subtitler lint SUBS.srt                       # check cue length, duration, reading speed
 subtitler bench run | report                  # engine and denoiser quality matrix
 ```
+
+## Re-runs are free
+
+Every expensive stage is cached in `<output>/.subtitler/<name>/`, keyed on the content of
+its input and the parameters that produced it. Run the same command twice and the second
+run reads the cache: 84 seconds becomes 0.5, and the `.srt`, `.vtt` and `.mp4` come out
+byte for byte the same.
+
+The keys chain, so changing one thing re-does only what depends on it:
+
+| Change | What re-runs |
+|---|---|
+| `--style-preset box` | the burn |
+| `--max-line 30` | cues, then the burn |
+| `--denoise afftdn` | denoise, transcribe, cues, burn (the extraction is reused) |
+| a different `--model` or device | transcribe onwards |
+| the input file's bytes | everything |
+
+`--force` ignores the cache: bare `--force` for all of it, or `--force transcribe` for one
+stage and everything after it. Deleting the `.subtitler` directory is always safe.
+
+Large inputs are fingerprinted by sampling (length, plus the first, middle and last
+megabyte) rather than by hashing in full, because reading 3 GB to decide whether to skip
+work defeats the point. See the note in `subtitler/cache.py` for the tradeoff.
+
+## Denoising
+
+Off by default, and it is not the centrepiece: on this project's material all five
+denoisers produced roughly 95% identical Serbian text. It is a benchmarked, pluggable
+stage, and every preset is a built-in ffmpeg filter, so there is nothing to compile.
+
+| Preset | Filter | For |
+|---|---|---|
+| `none` | | the default |
+| `afftdn` | `afftdn=nf=-25` | steady broadband hiss |
+| `arnndn` | `arnndn` + bundled RNNoise weights | speech recorded with a fan or an air conditioner |
+| `anlmdn` | `anlmdn` | non-local means; slower, gentler |
+| `speech` | highpass, `afftdn`, `loudnorm` | rumble plus hiss plus uneven levels |
+
+`arnndn` needs a model file, so one ships in `subtitler/assets/rnnoise/` (see the README
+there for provenance and licence). Nothing is downloaded at denoise time.
 
 ## Engines
 
@@ -73,6 +116,8 @@ installed is a hard error with the exact `uv sync` command to fix it, never a si
 |---|---|---|
 | Pop!_OS 22.04, ffmpeg 4.4.2 | groq | end to end, including burn-in |
 | Pop!_OS 22.04, ffmpeg 4.4.2 | faster-whisper large-v3, CPU int8 | 109s of Serbian at RTF 0.68 |
+| Pop!_OS 22.04, ffmpeg 4.4.2 | stage cache | 83.9s cold, 0.52s warm, all three outputs byte-identical |
+| Pop!_OS 22.04, ffmpeg 4.4.2 | all five denoise presets | each runs and changes the audio |
 | ubuntu-latest CI | faster-whisper tiny | transcribe, burn-in, hostile paths, diacritics |
 | macOS 14 Apple Silicon CI, ffmpeg-full 8.1.2 | mlx tiny | transcribe (RTF 0.40), burn-in, hostile paths, diacritics |
 | Any | faster-whisper on CUDA | not verified: this dev box has CUDA 13 and CTranslate2 wants 12 |
@@ -87,5 +132,7 @@ working because it ought to.
 
 ## License
 
-MIT. Bundled Noto Sans is SIL OFL 1.1 (see `subtitler/assets/fonts/`). Whisper weights are
-MIT. ffmpeg is invoked as a subprocess and is not linked.
+MIT. Bundled Noto Sans is SIL OFL 1.1 (see `subtitler/assets/fonts/`). The bundled RNNoise
+weights carry no copyright claim upstream (see `subtitler/assets/rnnoise/`); RNNoise itself
+is Xiph.Org's under BSD 3-clause and reaches this project only through ffmpeg's `arnndn`
+filter. Whisper weights are MIT. ffmpeg is invoked as a subprocess and is not linked.
