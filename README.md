@@ -382,6 +382,8 @@ uv sync --extra bench
 subtitler bench run                       # every local engine x every denoiser x every clip
 subtitler bench run --engine faster-whisper,groq-turbo --device cuda --fix
 subtitler bench report [RUN]              # recompute every metric from the kept transcripts
+subtitler bench agents [RUN]              # emit the reference-adjudication tasks
+subtitler bench agents [RUN] --merge      # read the responses back into benchmarks/references/
 ```
 
 Each cell writes to `benchmarks/results/<UTC timestamp>/`: `results.json` (one record per
@@ -397,11 +399,36 @@ each clip is extracted once and each denoiser runs once no matter how many engin
 
 **Two kinds of number, and the report keeps them apart.** WER, WER_folded, CER and the
 substitution/insertion/deletion split need a reference transcript. Realtime factor, wall
-clock, peak memory, cue count, reading speed and the hallucination heuristics do not.
-`benchmarks/references/` is currently empty, so **no WER is reported at all**: the harness
-says so and emits the reference-free half rather than inventing a ground truth. Adjudicated
-references are Phase 8. When one lands, `subtitler bench report` scores a run from months
-ago against it without re-transcribing anything.
+clock, peak memory, cue count, reading speed and the hallucination heuristics do not. With
+`benchmarks/references/` empty the harness says so and emits the reference-free half rather
+than inventing a ground truth, and `subtitler bench report` fills the WER columns of a run
+from months ago the moment a reference exists, without re-transcribing anything.
+
+### Where the reference comes from, and what it is not
+
+There is no human transcript of either fixture, so `subtitler bench agents` builds one out of
+the transcripts the engines already produced: it aligns them by timestamp into a side-by-side
+view and has an LLM adjudicate them into one best-guess **verbatim** Serbian text, then a
+second adversarial agent looks for spans where the first one smoothed over a disagreement or
+silently corrected the speaker's grammar. The roles are `.claude/agents/ref-adjudicator.md`
+and `.claude/agents/ref-critic.md`; the package itself has no model client in it and only
+emits a task manifest and merges validated JSON back.
+
+**That reference is a consensus pseudo-reference, not ground truth.** The adjudicator cannot
+hear the audio. It works at the text level with Serbian language knowledge, which catches a
+large class of real errors (`državne gane` is not a phrase, `državne organe` is) and is
+**blind to every error the engines made the same way**. So a WER against it ranks these
+engines against each other; it does not measure how much of the speech each one got right.
+Two consequences worth holding on to:
+
+- An engine that sits in the middle of the three is scored against a text partly derived from
+  its own output. `gozba-sample` at 0.7% is that effect as much as it is quality.
+- Every number stays marked `*` and `human_verified` stays `false` until a human resolves
+  `benchmarks/references/review-queue.md`: 44 spans, each with its timestamp, the candidate
+  readings and the choice that was made, so the pass takes minutes rather than an evening.
+
+Non-negotiable 9 holds throughout: the agents produce text, and every number in the report is
+computed from that text by `bench/metrics.py`.
 
 Text is normalized identically on both sides before scoring: NFC, Serbian Cyrillic to Latin
 through a hand-written table, lowercase, punctuation to spaces, whitespace collapsed.
@@ -422,8 +449,25 @@ What the first full matrix (30 cells on an RTX 3090, `benchmarks/results/`) actu
 - **The other three denoisers change almost nothing**, which is what the prior art said and
   the reason denoising is off by default.
 - **Speed, on this box**: `groq-turbo` RTF 0.006 to 0.015, `groq` 0.012 to 0.018, local
-  `large-v3` on CUDA float16 0.041 to 0.047 at 3.4 GB peak RSS. Whether the local transcript
-  is *better* is exactly the question no reference can answer yet.
+  `large-v3` on CUDA float16 0.041 to 0.047 at 3.4 GB peak RSS.
+- **Local wins on quality too, provisionally.** Against the adjudicated references, no
+  denoiser and no correction pass: local `large-v3` 0.7% and 14.6% WER on the two clips
+  against `groq/whisper-large-v3-turbo` at 3.3% and 15.4%, which is 9.7% against 11.1%
+  pooled over both. That answers PRD acceptance criterion 4 in the default's favour and it
+  is provisional in exactly the way the section above describes.
+- **`groq/whisper-large-v3` (the non-turbo model) truncates.** 27.3% pooled, and 68 of its 118
+  errors are deletions: it stopped 40 words before the end of the 105 s clip and dropped a
+  long stretch of the lecture. The turbo model on the identical audio did not.
+- **WER_folded equals WER in all 30 cells.** Whichever engine, whichever denoiser: these
+  models never write `c` for `č`. Serbian diacritics are simply not where the errors are, and
+  every error the table shows is a wrong word.
+- **`--fix` depends entirely on how bad the transcript was** (PRD open question 4). On the
+  clean philosophy clip it made every engine worse: 0.7 to 5.2, 3.3 to 5.2, 29.4 to 30.7. On
+  the noisy law lecture it made every engine better: 14.6 to 12.9, 15.4 to 7.9, 26.1 to 23.9.
+  It rewrites either way, and on a transcript that was already right the rewrite is damage.
+  Discount the gains: the reference is itself LLM-adjudicated, so a correction pass and the
+  adjudicator can agree on a wording neither heard, and the critic flagged three spans in
+  `uvod-u-pravo` where that is a live risk. Default stays off.
 
 ## Engines
 

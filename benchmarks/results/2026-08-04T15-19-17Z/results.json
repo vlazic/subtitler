@@ -42,21 +42,69 @@
   "references": {
     "gozba-sample": {
       "clip": "gozba-sample",
-      "reference": null,
-      "status": "absent",
+      "reference": "gozba-sample.txt",
+      "status": "present",
       "human_verified": false,
-      "adjudicated": false,
-      "source": "",
-      "note": "No reference transcript. Reference-free metrics only; WER is not reported for this clip. Phase 8 (LLM adjudication) produces this file."
+      "adjudicated": true,
+      "method": "llm-adjudicated consensus of engine transcripts, aligned by timestamp",
+      "run": "2026-08-04T15-21-56Z",
+      "engine_cells": [
+        "gozba-sample__none__faster-whisper__large-v3__nofix",
+        "gozba-sample__none__groq__large-v3__nofix",
+        "gozba-sample__none__groq-turbo__large-v3__nofix"
+      ],
+      "engines": [
+        "faster-whisper",
+        "groq",
+        "groq-turbo"
+      ],
+      "windows": 7,
+      "spans_flagged": 9,
+      "critic_findings": 1,
+      "critic_verdict": "This reference is usable but should not be treated as settled, and the honest parts of it make the unflagged parts more dangerous rather than less: the adjudicator demonstrably understood the transcribe-do-not-edit rule, keeping `o njegove epistemologiji`, `prema državi kao organizaciju`, `daju određene poslove` and `to je uopšte nije zakonska kategorija` in their ungrammatical spoken form, and flagged seventeen spans on uvod-u-pravo alone. That makes the four places where it silently supplied better Serbian than any engine produced look like lapses in an otherwise applied rule rather than a policy, and a reviewer will not find them by reading the flag list. The weakest clip is by far uvod-u-pravo, whose audio is poor enough that large stretches of the reference are reconstruction: `funkcionisanja države` at 00:08, `službenom licu` at 01:58 and `državnih organa` at 02:25 each replace a form that no engine produced with the word the legal context predicts, and each has a flagged twin elsewhere in the clip, so the flagging was inconsistent rather than absent. `Subordinacija je odnos` at 00:15 overrides a two-engine majority to produce a grammatical copula. Because three of these four corrections are exactly what an LLM correction pass would also do, the `--fix` axis on uvod-u-pravo is measuring partly against its own output and its margin there should be discounted until a human confirms those four spans. gozba-sample is in much better shape, with clean audio, high engine agreement, and only one real omission: groq was recorded as silent in window 6 when it had in fact emitted that clause early and two tokens shorter. The single highest-leverage action for a reviewer is not any individual span but the `Locke`/`Lok`/`Džon Lok` orthography decision the adjudicator already raised, since it moves WER on every occurrence in the clip and no amount of adjudication can settle a spelling convention.",
+      "review_queue": "benchmarks/references/review-queue.md",
+      "agent": {
+        "role": "ref-adjudicator",
+        "task_id": "adjudicate-gozba-sample",
+        "attempts": 1
+      },
+      "source": "adjudicated from 3 engine transcripts in benchmarks/results/2026-08-04T15-21-56Z",
+      "words": 153,
+      "characters": 1015,
+      "note": "Consensus pseudo-reference: adjudicated from engine transcripts by an LLM that cannot hear the audio. It catches errors that are not Serbian and is blind to any error every engine made the same way. WER against it ranks engines against each other and does not establish truth. Not human-verified: resolve the flagged spans in benchmarks/references/review-queue.md against the audio before trusting it."
     },
     "uvod-u-pravo": {
       "clip": "uvod-u-pravo",
-      "reference": null,
-      "status": "absent",
+      "reference": "uvod-u-pravo.txt",
+      "status": "present",
       "human_verified": false,
-      "adjudicated": false,
-      "source": "",
-      "note": "No reference transcript. Reference-free metrics only; WER is not reported for this clip. Phase 8 (LLM adjudication) produces this file."
+      "adjudicated": true,
+      "method": "llm-adjudicated consensus of engine transcripts, aligned by timestamp",
+      "run": "2026-08-04T15-21-56Z",
+      "engine_cells": [
+        "uvod-u-pravo__none__faster-whisper__large-v3__nofix",
+        "uvod-u-pravo__none__groq__large-v3__nofix",
+        "uvod-u-pravo__none__groq-turbo__large-v3__nofix"
+      ],
+      "engines": [
+        "faster-whisper",
+        "groq",
+        "groq-turbo"
+      ],
+      "windows": 11,
+      "spans_flagged": 26,
+      "critic_findings": 8,
+      "critic_verdict": "This reference is usable but should not be treated as settled, and the honest parts of it make the unflagged parts more dangerous rather than less: the adjudicator demonstrably understood the transcribe-do-not-edit rule, keeping `o njegove epistemologiji`, `prema državi kao organizaciju`, `daju određene poslove` and `to je uopšte nije zakonska kategorija` in their ungrammatical spoken form, and flagged seventeen spans on uvod-u-pravo alone. That makes the four places where it silently supplied better Serbian than any engine produced look like lapses in an otherwise applied rule rather than a policy, and a reviewer will not find them by reading the flag list. The weakest clip is by far uvod-u-pravo, whose audio is poor enough that large stretches of the reference are reconstruction: `funkcionisanja države` at 00:08, `službenom licu` at 01:58 and `državnih organa` at 02:25 each replace a form that no engine produced with the word the legal context predicts, and each has a flagged twin elsewhere in the clip, so the flagging was inconsistent rather than absent. `Subordinacija je odnos` at 00:15 overrides a two-engine majority to produce a grammatical copula. Because three of these four corrections are exactly what an LLM correction pass would also do, the `--fix` axis on uvod-u-pravo is measuring partly against its own output and its margin there should be discounted until a human confirms those four spans. gozba-sample is in much better shape, with clean audio, high engine agreement, and only one real omission: groq was recorded as silent in window 6 when it had in fact emitted that clause early and two tokens shorter. The single highest-leverage action for a reviewer is not any individual span but the `Locke`/`Lok`/`Džon Lok` orthography decision the adjudicator already raised, since it moves WER on every occurrence in the clip and no amount of adjudication can settle a spelling convention.",
+      "review_queue": "benchmarks/references/review-queue.md",
+      "agent": {
+        "role": "ref-adjudicator",
+        "task_id": "adjudicate-uvod-u-pravo",
+        "attempts": 1
+      },
+      "source": "adjudicated from 3 engine transcripts in benchmarks/results/2026-08-04T15-21-56Z",
+      "words": 280,
+      "characters": 1706,
+      "note": "Consensus pseudo-reference: adjudicated from engine transcripts by an LLM that cannot hear the audio. It catches errors that are not Serbian and is blind to any error every engine made the same way. WER against it ranks engines against each other and does not establish truth. Not human-verified: resolve the flagged spans in benchmarks/references/review-queue.md against the audio before trusting it."
     }
   },
   "results": [
@@ -299,7 +347,17 @@
           "hvala": 1
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.006535947712418301,
+        "wer_folded": 0.006535947712418301,
+        "cer": 0.002026342451874367,
+        "substitutions": 1,
+        "insertions": 0,
+        "deletions": 0,
+        "hits": 152,
+        "reference_words": 153,
+        "hypothesis_words": 153
+      }
     },
     {
       "cell_id": "gozba-sample__none__groq__large-v3__nofix",
@@ -535,7 +593,17 @@
           "hvala": 2
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.29411764705882354,
+        "wer_folded": 0.29411764705882354,
+        "cer": 0.26038500506585616,
+        "substitutions": 4,
+        "insertions": 1,
+        "deletions": 40,
+        "hits": 109,
+        "reference_words": 153,
+        "hypothesis_words": 114
+      }
     },
     {
       "cell_id": "gozba-sample__none__groq-turbo__large-v3__nofix",
@@ -763,7 +831,17 @@
           "hvala": 1
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.032679738562091505,
+        "wer_folded": 0.032679738562091505,
+        "cer": 0.0070921985815602835,
+        "substitutions": 4,
+        "insertions": 0,
+        "deletions": 1,
+        "hits": 148,
+        "reference_words": 153,
+        "hypothesis_words": 152
+      }
     },
     {
       "cell_id": "gozba-sample__afftdn__faster-whisper__large-v3__nofix",
@@ -1013,7 +1091,17 @@
           "hvala": 1
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.058823529411764705,
+        "wer_folded": 0.058823529411764705,
+        "cer": 0.025329280648429583,
+        "substitutions": 5,
+        "insertions": 0,
+        "deletions": 4,
+        "hits": 144,
+        "reference_words": 153,
+        "hypothesis_words": 149
+      }
     },
     {
       "cell_id": "gozba-sample__afftdn__groq__large-v3__nofix",
@@ -1221,7 +1309,17 @@
           "hvala": 2
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.3006535947712418,
+        "wer_folded": 0.3006535947712418,
+        "cer": 0.24012158054711247,
+        "substitutions": 3,
+        "insertions": 1,
+        "deletions": 42,
+        "hits": 108,
+        "reference_words": 153,
+        "hypothesis_words": 112
+      }
     },
     {
       "cell_id": "gozba-sample__afftdn__groq-turbo__large-v3__nofix",
@@ -1458,7 +1556,17 @@
           "hvala": 1
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.032679738562091505,
+        "wer_folded": 0.032679738562091505,
+        "cer": 0.0060790273556231,
+        "substitutions": 4,
+        "insertions": 0,
+        "deletions": 1,
+        "hits": 148,
+        "reference_words": 153,
+        "hypothesis_words": 152
+      }
     },
     {
       "cell_id": "gozba-sample__arnndn__faster-whisper__large-v3__nofix",
@@ -1701,7 +1809,17 @@
           "hvala": 1
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.013071895424836602,
+        "wer_folded": 0.013071895424836602,
+        "cer": 0.00303951367781155,
+        "substitutions": 2,
+        "insertions": 0,
+        "deletions": 0,
+        "hits": 151,
+        "reference_words": 153,
+        "hypothesis_words": 153
+      }
     },
     {
       "cell_id": "gozba-sample__arnndn__groq__large-v3__nofix",
@@ -1882,7 +2000,17 @@
           "hvala": 2
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.5490196078431373,
+        "wer_folded": 0.5490196078431373,
+        "cer": 0.47720364741641336,
+        "substitutions": 4,
+        "insertions": 1,
+        "deletions": 79,
+        "hits": 70,
+        "reference_words": 153,
+        "hypothesis_words": 75
+      }
     },
     {
       "cell_id": "gozba-sample__arnndn__groq-turbo__large-v3__nofix",
@@ -2119,7 +2247,17 @@
           "hvala": 1
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.0392156862745098,
+        "wer_folded": 0.0392156862745098,
+        "cer": 0.008105369807497468,
+        "substitutions": 5,
+        "insertions": 0,
+        "deletions": 1,
+        "hits": 147,
+        "reference_words": 153,
+        "hypothesis_words": 152
+      }
     },
     {
       "cell_id": "gozba-sample__anlmdn__faster-whisper__large-v3__nofix",
@@ -2362,7 +2500,17 @@
           "hvala": 1
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.006535947712418301,
+        "wer_folded": 0.006535947712418301,
+        "cer": 0.002026342451874367,
+        "substitutions": 1,
+        "insertions": 0,
+        "deletions": 0,
+        "hits": 152,
+        "reference_words": 153,
+        "hypothesis_words": 153
+      }
     },
     {
       "cell_id": "gozba-sample__anlmdn__groq__large-v3__nofix",
@@ -2599,7 +2747,17 @@
           "hvala": 2
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.29411764705882354,
+        "wer_folded": 0.29411764705882354,
+        "cer": 0.26038500506585616,
+        "substitutions": 4,
+        "insertions": 1,
+        "deletions": 40,
+        "hits": 109,
+        "reference_words": 153,
+        "hypothesis_words": 114
+      }
     },
     {
       "cell_id": "gozba-sample__anlmdn__groq-turbo__large-v3__nofix",
@@ -2828,7 +2986,17 @@
           "hvala": 1
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.032679738562091505,
+        "wer_folded": 0.032679738562091505,
+        "cer": 0.0070921985815602835,
+        "substitutions": 4,
+        "insertions": 0,
+        "deletions": 1,
+        "hits": 148,
+        "reference_words": 153,
+        "hypothesis_words": 152
+      }
     },
     {
       "cell_id": "gozba-sample__speech__faster-whisper__large-v3__nofix",
@@ -2876,7 +3044,7 @@
         {
           "index": 1,
           "start": 0.11,
-          "end": 1.59,
+          "end": 1.5899999999999999,
           "lines": [
             "Misao"
           ]
@@ -3079,7 +3247,17 @@
           "hvala": 1
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.058823529411764705,
+        "wer_folded": 0.058823529411764705,
+        "cer": 0.02330293819655522,
+        "substitutions": 5,
+        "insertions": 0,
+        "deletions": 4,
+        "hits": 144,
+        "reference_words": 153,
+        "hypothesis_words": 149
+      }
     },
     {
       "cell_id": "gozba-sample__speech__groq__large-v3__nofix",
@@ -3171,7 +3349,7 @@
         {
           "index": 7,
           "start": 51.88,
-          "end": 53.330000000000005,
+          "end": 53.33,
           "lines": [
             "započinjemo današnju emisiju."
           ]
@@ -3283,13 +3461,13 @@
       "cue_stats": {
         "count": 19,
         "total_chars": 763,
-        "mean_cps": 13.342932078162368,
-        "p95_cps": 20.0,
-        "max_cps": 20.0,
+        "mean_cps": 13.342932078162374,
+        "p95_cps": 20.00000000000006,
+        "max_cps": 20.00000000000006,
         "over_line_pct": 0.0,
         "over_lines_pct": 0.0,
         "over_dur_pct": 0.0,
-        "over_cps_pct": 0.0,
+        "over_cps_pct": 5.2631578947368425,
         "under_min_dur_pct": 0.0
       },
       "hallucination": {
@@ -3303,7 +3481,17 @@
           "hvala": 2
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.3202614379084967,
+        "wer_folded": 0.3202614379084967,
+        "cer": 0.24417426545086118,
+        "substitutions": 5,
+        "insertions": 1,
+        "deletions": 43,
+        "hits": 105,
+        "reference_words": 153,
+        "hypothesis_words": 111
+      }
     },
     {
       "cell_id": "gozba-sample__speech__groq-turbo__large-v3__nofix",
@@ -3532,7 +3720,17 @@
           "hvala": 1
         }
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.0392156862745098,
+        "wer_folded": 0.0392156862745098,
+        "cer": 0.00911854103343465,
+        "substitutions": 5,
+        "insertions": 0,
+        "deletions": 1,
+        "hits": 147,
+        "reference_words": 153,
+        "hypothesis_words": 152
+      }
     },
     {
       "cell_id": "uvod-u-pravo__none__faster-whisper__large-v3__nofix",
@@ -3900,7 +4098,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.14642857142857144,
+        "wer_folded": 0.14642857142857144,
+        "cer": 0.07659831121833534,
+        "substitutions": 31,
+        "insertions": 5,
+        "deletions": 5,
+        "hits": 244,
+        "reference_words": 280,
+        "hypothesis_words": 280
+      }
     },
     {
       "cell_id": "uvod-u-pravo__none__groq__large-v3__nofix",
@@ -4086,7 +4294,7 @@
         {
           "index": 18,
           "start": 82.22,
-          "end": 88.60865,
+          "end": 88.609,
           "lines": [
             "Dakle, to su ljudi",
             "koji rade u imenu za račun država."
@@ -4094,16 +4302,16 @@
         },
         {
           "index": 19,
-          "start": 89.22865,
-          "end": 91.08865,
+          "start": 89.229,
+          "end": 91.089,
           "lines": [
             "E sad,"
           ]
         },
         {
           "index": 20,
-          "start": 91.08865,
-          "end": 96.628654,
+          "start": 91.089,
+          "end": 96.629,
           "lines": [
             "tim državnim službenim",
             "licima se daju određene poslove."
@@ -4111,8 +4319,8 @@
         },
         {
           "index": 21,
-          "start": 96.628654,
-          "end": 101.668655,
+          "start": 96.629,
+          "end": 101.669,
           "lines": [
             "Zato je imate određenu",
             "državnu službenu lice,"
@@ -4120,8 +4328,8 @@
         },
         {
           "index": 22,
-          "start": 101.668655,
-          "end": 107.68865,
+          "start": 101.669,
+          "end": 107.689,
           "lines": [
             "da te mu da rade neki posao",
             "i taj posao predstavlja njegovu radu."
@@ -4129,24 +4337,24 @@
         },
         {
           "index": 23,
-          "start": 107.488655,
-          "end": 114.488655,
+          "start": 107.489,
+          "end": 114.489,
           "lines": [
             "Uvod u učinjenje učinjenja je najprostije"
           ]
         },
         {
           "index": 24,
-          "start": 117.88866,
-          "end": 119.34865,
+          "start": 117.889,
+          "end": 119.349,
           "lines": [
             "i moguće da se objasnemo."
           ]
         },
         {
           "index": 25,
-          "start": 119.36865,
-          "end": 125.48865,
+          "start": 119.369,
+          "end": 125.489,
           "lines": [
             "Uzmeš neki posao, daš ga jednom",
             "državnom tvrdnemu licu i kažeš evo ti,"
@@ -4154,16 +4362,16 @@
         },
         {
           "index": 26,
-          "start": 125.48865,
-          "end": 130.82864,
+          "start": 125.489,
+          "end": 130.829,
           "lines": [
             "da radi to, to je tvoja nadležnost."
           ]
         },
         {
           "index": 27,
-          "start": 131.30865,
-          "end": 137.78865,
+          "start": 131.309,
+          "end": 137.789,
           "lines": [
             "E sada, postoje dve vrste nadražnosti u",
             "principu i ova treća nekako funkcionalna,"
@@ -4171,16 +4379,16 @@
         },
         {
           "index": 28,
-          "start": 137.78865,
-          "end": 140.40866,
+          "start": 137.789,
+          "end": 140.409,
           "lines": [
             "to je uopšte nije zakonska kategorija,"
           ]
         },
         {
           "index": 29,
-          "start": 140.40866,
-          "end": 144.16866,
+          "start": 140.409,
+          "end": 144.169,
           "lines": [
             "ali se često spominje,",
             "pa ćemo nju objasniti,"
@@ -4188,8 +4396,8 @@
         },
         {
           "index": 30,
-          "start": 144.16866,
-          "end": 149.70865,
+          "start": 144.169,
+          "end": 149.709,
           "lines": [
             "i prisutna je naravno u radu državnih",
             "ordana, ali nije zakonska kategorija."
@@ -4197,16 +4405,16 @@
         },
         {
           "index": 31,
-          "start": 151.10864,
-          "end": 153.72865,
+          "start": 151.109,
+          "end": 153.729,
           "lines": [
             "Da krenemo od stvarne, dakle,"
           ]
         },
         {
           "index": 32,
-          "start": 153.72865,
-          "end": 158.58865,
+          "start": 153.729,
+          "end": 158.589,
           "lines": [
             "ako uzmete recimo jednog sudija",
             "koji je državno službeno lice"
@@ -4214,8 +4422,8 @@
         },
         {
           "index": 33,
-          "start": 158.58865,
-          "end": 163.16866,
+          "start": 158.589,
+          "end": 163.169,
           "lines": [
             "i jednog narodnog poslanika",
             "koji je državno službeno lice,"
@@ -4223,8 +4431,8 @@
         },
         {
           "index": 34,
-          "start": 163.16866,
-          "end": 164.42865,
+          "start": 163.169,
+          "end": 164.429,
           "lines": [
             "da li oni radi isti?"
           ]
@@ -4234,9 +4442,9 @@
       "cue_stats": {
         "count": 34,
         "total_chars": 1583,
-        "mean_cps": 10.385244295839877,
-        "p95_cps": 15.873141850331942,
-        "max_cps": 17.123404954828402,
+        "mean_cps": 10.385226377847887,
+        "p95_cps": 15.873015873015987,
+        "max_cps": 17.123287671232784,
         "over_line_pct": 0.0,
         "over_lines_pct": 0.0,
         "over_dur_pct": 0.0,
@@ -4252,7 +4460,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.2392857142857143,
+        "wer_folded": 0.2392857142857143,
+        "cer": 0.11399276236429433,
+        "substitutions": 43,
+        "insertions": 5,
+        "deletions": 19,
+        "hits": 218,
+        "reference_words": 280,
+        "hypothesis_words": 266
+      }
     },
     {
       "cell_id": "uvod-u-pravo__none__groq-turbo__large-v3__nofix",
@@ -4457,7 +4675,7 @@
         {
           "index": 20,
           "start": 83.06,
-          "end": 87.70865,
+          "end": 87.709,
           "lines": [
             "Dakle, to su ljudi",
             "koji rade u ime za računom državu."
@@ -4465,8 +4683,8 @@
         },
         {
           "index": 21,
-          "start": 89.32865,
-          "end": 95.90865,
+          "start": 89.329,
+          "end": 95.909,
           "lines": [
             "E sad, tim državnim službenim",
             "licima se daju određene poslovi."
@@ -4474,8 +4692,8 @@
         },
         {
           "index": 22,
-          "start": 96.24866,
-          "end": 101.60865,
+          "start": 96.249,
+          "end": 101.609,
           "lines": [
             "Zadrži imate određeno",
             "državno službeno lice,"
@@ -4483,8 +4701,8 @@
         },
         {
           "index": 23,
-          "start": 101.60865,
-          "end": 107.74866,
+          "start": 101.609,
+          "end": 107.749,
           "lines": [
             "dajte mu da rade neki posao i taj",
             "posao predstavlja njegovu naravljaju."
@@ -4492,8 +4710,8 @@
         },
         {
           "index": 24,
-          "start": 107.668655,
-          "end": 112.40865,
+          "start": 107.669,
+          "end": 112.409,
           "lines": [
             "Ja se kudim dakle",
             "da vam što jednostavnije objasnim."
@@ -4501,16 +4719,16 @@
         },
         {
           "index": 25,
-          "start": 112.40865,
-          "end": 116.72865,
+          "start": 112.409,
+          "end": 116.729,
           "lines": [
             "Ne da se držim tih definicija izučbenika,"
           ]
         },
         {
           "index": 26,
-          "start": 116.72865,
-          "end": 119.38866,
+          "start": 116.729,
+          "end": 119.389,
           "lines": [
             "nego najprostije je moguće",
             "da vam objasnim."
@@ -4518,16 +4736,16 @@
         },
         {
           "index": 27,
-          "start": 119.42865,
-          "end": 121.36865,
+          "start": 119.429,
+          "end": 121.369,
           "lines": [
             "Uzmeš neki posao,"
           ]
         },
         {
           "index": 28,
-          "start": 121.36865,
-          "end": 127.32865,
+          "start": 121.369,
+          "end": 127.329,
           "lines": [
             "daš ga jednom državnom služnom oblicu",
             "i dažeš evo ti na radi to."
@@ -4535,16 +4753,16 @@
         },
         {
           "index": 29,
-          "start": 127.32865,
-          "end": 129.40866,
+          "start": 127.329,
+          "end": 129.409,
           "lines": [
             "To je tvoja nadležnost."
           ]
         },
         {
           "index": 30,
-          "start": 131.32864,
-          "end": 137.66866,
+          "start": 131.329,
+          "end": 137.669,
           "lines": [
             "E sada, postoje dve vrste nadležnosti u",
             "principu i ova treća nekakva funkcionalna,"
@@ -4552,16 +4770,16 @@
         },
         {
           "index": 31,
-          "start": 137.66866,
-          "end": 140.32864,
+          "start": 137.669,
+          "end": 140.329,
           "lines": [
             "to je uopšte nije zakonska kategorija,"
           ]
         },
         {
           "index": 32,
-          "start": 140.32864,
-          "end": 144.16866,
+          "start": 140.329,
+          "end": 144.169,
           "lines": [
             "ali se često spominje,",
             "pa ćemo nju objasniti,"
@@ -4569,8 +4787,8 @@
         },
         {
           "index": 33,
-          "start": 144.16866,
-          "end": 147.46866,
+          "start": 144.169,
+          "end": 147.469,
           "lines": [
             "i prisutna je naravno",
             "u radu državnih podana,"
@@ -4578,24 +4796,24 @@
         },
         {
           "index": 34,
-          "start": 147.90866,
-          "end": 150.32864,
+          "start": 147.909,
+          "end": 150.329,
           "lines": [
             "Ali nije zakonska kategorija."
           ]
         },
         {
           "index": 35,
-          "start": 150.32864,
-          "end": 152.86865,
+          "start": 150.329,
+          "end": 152.869,
           "lines": [
             "Da krenemo od stvarne, dakle,"
           ]
         },
         {
           "index": 36,
-          "start": 152.86865,
-          "end": 158.70865,
+          "start": 152.869,
+          "end": 158.709,
           "lines": [
             "ako uzmete recimo jednog sudiju",
             "koji je državno službno novice,"
@@ -4603,8 +4821,8 @@
         },
         {
           "index": 37,
-          "start": 158.70865,
-          "end": 164.90866,
+          "start": 158.709,
+          "end": 164.909,
           "lines": [
             "jednog narodnog poslanika koji je državno",
             "službno novice, da li oni radi isti?"
@@ -4615,9 +4833,9 @@
       "cue_stats": {
         "count": 37,
         "total_chars": 1672,
-        "mean_cps": 10.685452224449593,
+        "mean_cps": 10.685430823622934,
         "p95_cps": 15.159574468085108,
-        "max_cps": 16.165352761831723,
+        "max_cps": 16.165413533834606,
         "over_line_pct": 0.0,
         "over_lines_pct": 0.0,
         "over_dur_pct": 0.0,
@@ -4633,7 +4851,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.15357142857142858,
+        "wer_folded": 0.15357142857142858,
+        "cer": 0.054282267792521106,
+        "substitutions": 34,
+        "insertions": 4,
+        "deletions": 5,
+        "hits": 241,
+        "reference_words": 280,
+        "hypothesis_words": 279
+      }
     },
     {
       "cell_id": "uvod-u-pravo__afftdn__faster-whisper__large-v3__nofix",
@@ -5021,7 +5249,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.19285714285714287,
+        "wer_folded": 0.19285714285714287,
+        "cer": 0.08082026537997587,
+        "substitutions": 37,
+        "insertions": 11,
+        "deletions": 6,
+        "hits": 237,
+        "reference_words": 280,
+        "hypothesis_words": 285
+      }
     },
     {
       "cell_id": "uvod-u-pravo__afftdn__groq__large-v3__nofix",
@@ -5209,8 +5447,8 @@
         },
         {
           "index": 18,
-          "start": 83.192505,
-          "end": 87.692505,
+          "start": 83.193,
+          "end": 87.693,
           "lines": [
             "To su ljudi",
             "koji rade u imenu za račun država."
@@ -5218,8 +5456,8 @@
         },
         {
           "index": 19,
-          "start": 89.2925,
-          "end": 94.9725,
+          "start": 89.292,
+          "end": 94.972,
           "lines": [
             "E sad, tim državnim službenim",
             "licima se daju određene"
@@ -5227,32 +5465,32 @@
         },
         {
           "index": 20,
-          "start": 94.9725,
-          "end": 101.9725,
+          "start": 94.972,
+          "end": 101.972,
           "lines": [
             "poslove. Uvod u posao je jednostavno,"
           ]
         },
         {
           "index": 21,
-          "start": 112.3525,
-          "end": 116.7525,
+          "start": 112.352,
+          "end": 116.752,
           "lines": [
             "ne da se držim definicije dužbenika,"
           ]
         },
         {
           "index": 22,
-          "start": 116.7525,
-          "end": 119.3125,
+          "start": 116.752,
+          "end": 119.312,
           "lines": [
             "nego najprostije je da ga objasnim."
           ]
         },
         {
           "index": 23,
-          "start": 119.2125,
-          "end": 125.4725,
+          "start": 119.212,
+          "end": 125.472,
           "lines": [
             "Dakle, uzmeš neki posao, daže ga jednom",
             "državnom tvrdnom oblicu i kažeš evo ti,"
@@ -5260,24 +5498,24 @@
         },
         {
           "index": 24,
-          "start": 125.4725,
-          "end": 129.6925,
+          "start": 125.472,
+          "end": 129.692,
           "lines": [
             "napravo radi to, to je tvoja nadležnost."
           ]
         },
         {
           "index": 25,
-          "start": 129.0925,
-          "end": 130.8725,
+          "start": 129.092,
+          "end": 130.872,
           "lines": [
             "Bukvalno tako."
           ]
         },
         {
           "index": 26,
-          "start": 130.8725,
-          "end": 137.6725,
+          "start": 130.872,
+          "end": 137.672,
           "lines": [
             "E sada, postoje dve vrste nadležnosti u",
             "principu i ova treća nekakva funkcionalna,"
@@ -5285,8 +5523,8 @@
         },
         {
           "index": 27,
-          "start": 137.3125,
-          "end": 142.0925,
+          "start": 137.312,
+          "end": 142.092,
           "lines": [
             "to je uopšte nije zakonska kategorija,",
             "ali se često spominje,"
@@ -5294,8 +5532,8 @@
         },
         {
           "index": 28,
-          "start": 142.0925,
-          "end": 147.57251,
+          "start": 142.092,
+          "end": 147.573,
           "lines": [
             "pa ću vam nju objasniti, i prisutna je",
             "naravno u radu državnih vodana,"
@@ -5303,24 +5541,24 @@
         },
         {
           "index": 29,
-          "start": 147.2125,
-          "end": 151.1125,
+          "start": 147.212,
+          "end": 151.112,
           "lines": [
             "Ali nije zakonska kategorija."
           ]
         },
         {
           "index": 30,
-          "start": 151.1125,
-          "end": 152.8325,
+          "start": 151.112,
+          "end": 152.832,
           "lines": [
             "Da krenemo od stvarne, dakle,"
           ]
         },
         {
           "index": 31,
-          "start": 152.8325,
-          "end": 158.7125,
+          "start": 152.832,
+          "end": 158.712,
           "lines": [
             "ako uzmete recimo jednog sudiju",
             "koji je državno službeno lice,"
@@ -5328,8 +5566,8 @@
         },
         {
           "index": 32,
-          "start": 158.7125,
-          "end": 164.4125,
+          "start": 158.712,
+          "end": 164.412,
           "lines": [
             "jednog narodnog poslanika koji je državno",
             "službeno lice, da li oni rade isti?"
@@ -5340,7 +5578,7 @@
       "cue_stats": {
         "count": 32,
         "total_chars": 1527,
-        "mean_cps": 10.181811854234356,
+        "mean_cps": 10.18173975309904,
         "p95_cps": 14.705882352941172,
         "max_cps": 16.86046511627908,
         "over_line_pct": 0.0,
@@ -5358,7 +5596,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.23214285714285715,
+        "wer_folded": 0.23214285714285715,
+        "cer": 0.15018094089264172,
+        "substitutions": 32,
+        "insertions": 5,
+        "deletions": 28,
+        "hits": 220,
+        "reference_words": 280,
+        "hypothesis_words": 257
+      }
     },
     {
       "cell_id": "uvod-u-pravo__afftdn__groq-turbo__large-v3__nofix",
@@ -5556,7 +5804,7 @@
         {
           "index": 19,
           "start": 83.06,
-          "end": 87.692505,
+          "end": 87.693,
           "lines": [
             "Dakle, to su ljudi",
             "koji rade u ime za račun države."
@@ -5564,8 +5812,8 @@
         },
         {
           "index": 20,
-          "start": 89.3125,
-          "end": 96.052505,
+          "start": 89.312,
+          "end": 96.053,
           "lines": [
             "E sad, tim državnim službenim",
             "licima se daju određenom poslušću."
@@ -5573,8 +5821,8 @@
         },
         {
           "index": 21,
-          "start": 96.4725,
-          "end": 101.5725,
+          "start": 96.472,
+          "end": 101.572,
           "lines": [
             "Dakle,",
             "imate potređeno državno službeno lice,"
@@ -5582,8 +5830,8 @@
         },
         {
           "index": 22,
-          "start": 101.5725,
-          "end": 107.6325,
+          "start": 101.572,
+          "end": 107.632,
           "lines": [
             "dakle da rada neki posao",
             "i taj posao predstavlja njegovu nadle."
@@ -5591,8 +5839,8 @@
         },
         {
           "index": 23,
-          "start": 107.6725,
-          "end": 112.3925,
+          "start": 107.672,
+          "end": 112.392,
           "lines": [
             "Ja se budim dakle",
             "da vam što jednostavnije objasnim."
@@ -5600,16 +5848,16 @@
         },
         {
           "index": 24,
-          "start": 112.3925,
-          "end": 116.7125,
+          "start": 112.392,
+          "end": 116.712,
           "lines": [
             "Ne da se držim tih definicija iz učbenika,"
           ]
         },
         {
           "index": 25,
-          "start": 116.7125,
-          "end": 119.3725,
+          "start": 116.712,
+          "end": 119.372,
           "lines": [
             "nego najprostije je moguće",
             "da vam objasnim."
@@ -5617,16 +5865,16 @@
         },
         {
           "index": 26,
-          "start": 119.412506,
-          "end": 121.332504,
+          "start": 119.413,
+          "end": 121.333,
           "lines": [
             "Uzmeš neki posao,"
           ]
         },
         {
           "index": 27,
-          "start": 121.332504,
-          "end": 127.332504,
+          "start": 121.333,
+          "end": 127.333,
           "lines": [
             "daš ga jednom državnom službenom licu",
             "i kažeš evo ti na radi to."
@@ -5634,24 +5882,24 @@
         },
         {
           "index": 28,
-          "start": 127.332504,
-          "end": 129.3925,
+          "start": 127.333,
+          "end": 129.393,
           "lines": [
             "To je tvoja nadležnost."
           ]
         },
         {
           "index": 29,
-          "start": 131.3325,
-          "end": 134.2125,
+          "start": 131.332,
+          "end": 134.212,
           "lines": [
             "E sada, postoje dve vrste nadležnosti."
           ]
         },
         {
           "index": 30,
-          "start": 134.2125,
-          "end": 140.35251,
+          "start": 134.212,
+          "end": 140.353,
           "lines": [
             "U principu je ova treća nekakva",
             "funkcionalna, uopšte nije zakonska"
@@ -5659,8 +5907,8 @@
         },
         {
           "index": 31,
-          "start": 140.35251,
-          "end": 144.2325,
+          "start": 140.353,
+          "end": 144.232,
           "lines": [
             "ali se često spominje,",
             "pa ćemo nju objasniti."
@@ -5668,8 +5916,8 @@
         },
         {
           "index": 32,
-          "start": 144.4125,
-          "end": 150.1525,
+          "start": 144.412,
+          "end": 150.152,
           "lines": [
             "Prisutna je naravno u radu državnih",
             "hordana, ali nije zakonska kategorija."
@@ -5677,16 +5925,16 @@
         },
         {
           "index": 33,
-          "start": 150.1525,
-          "end": 152.8125,
+          "start": 150.152,
+          "end": 152.812,
           "lines": [
             "Da krenemo od stvarne, dakle,"
           ]
         },
         {
           "index": 34,
-          "start": 152.8125,
-          "end": 158.7125,
+          "start": 152.812,
+          "end": 158.712,
           "lines": [
             "ako uzmete recimo jednog sudiju",
             "koji je državno službeno u lice,"
@@ -5694,8 +5942,8 @@
         },
         {
           "index": 35,
-          "start": 158.7125,
-          "end": 164.8725,
+          "start": 158.712,
+          "end": 164.872,
           "lines": [
             "jednog narodnog poslanika koji je državno",
             "službeno u lice, da li oni radi isti."
@@ -5706,7 +5954,7 @@
       "cue_stats": {
         "count": 35,
         "total_chars": 1649,
-        "mean_cps": 10.551990924392701,
+        "mean_cps": 10.551951450684951,
         "p95_cps": 13.194444444444466,
         "max_cps": 16.165413533834606,
         "over_line_pct": 0.0,
@@ -5724,7 +5972,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.18214285714285713,
+        "wer_folded": 0.18214285714285713,
+        "cer": 0.08745476477683957,
+        "substitutions": 33,
+        "insertions": 7,
+        "deletions": 11,
+        "hits": 236,
+        "reference_words": 280,
+        "hypothesis_words": 276
+      }
     },
     {
       "cell_id": "uvod-u-pravo__arnndn__faster-whisper__large-v3__nofix",
@@ -6041,7 +6299,17 @@
         "prompt_echo_text": "koristi ispravna imena za ljude knjige filozofske škole itd",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.425,
+        "wer_folded": 0.425,
+        "cer": 0.30759951749095293,
+        "substitutions": 51,
+        "insertions": 10,
+        "deletions": 58,
+        "hits": 171,
+        "reference_words": 280,
+        "hypothesis_words": 232
+      }
     },
     {
       "cell_id": "uvod-u-pravo__arnndn__groq__large-v3__nofix",
@@ -6251,7 +6519,7 @@
         {
           "index": 21,
           "start": 82.3,
-          "end": 87.71001,
+          "end": 87.71,
           "lines": [
             "To su ljudi",
             "koji rade u imenu izračunog država."
@@ -6259,15 +6527,15 @@
         },
         {
           "index": 22,
-          "start": 87.590004,
-          "end": 91.090004,
+          "start": 87.59,
+          "end": 91.09,
           "lines": [
             "E sad,"
           ]
         },
         {
           "index": 23,
-          "start": 91.090004,
+          "start": 91.09,
           "end": 96.41,
           "lines": [
             "tim državnim službenim licima se",
@@ -6276,8 +6544,8 @@
         },
         {
           "index": 24,
-          "start": 96.490005,
-          "end": 101.57001,
+          "start": 96.49,
+          "end": 101.57,
           "lines": [
             "Znate,",
             "imate uopređeno državno službeno plice,"
@@ -6285,7 +6553,7 @@
         },
         {
           "index": 25,
-          "start": 101.57001,
+          "start": 101.57,
           "end": 107.01,
           "lines": [
             "tako da radi neki posao",
@@ -6313,7 +6581,7 @@
         {
           "index": 28,
           "start": 119.37,
-          "end": 123.950005,
+          "end": 123.95,
           "lines": [
             "Uzmeš neki posao,",
             "daš ga jednom državnom službenom uvići,"
@@ -6321,8 +6589,8 @@
         },
         {
           "index": 29,
-          "start": 123.950005,
-          "end": 126.71001,
+          "start": 123.95,
+          "end": 126.71,
           "lines": [
             "kažeš evo ti, nadležnosti."
           ]
@@ -6338,15 +6606,15 @@
         {
           "index": 31,
           "start": 131.31,
-          "end": 134.43001,
+          "end": 134.43,
           "lines": [
             "Postoje dve vrste nadležnosti,"
           ]
         },
         {
           "index": 32,
-          "start": 134.43001,
-          "end": 140.43001,
+          "start": 134.43,
+          "end": 140.43,
           "lines": [
             "u principu i ova treća nekako funkcionalno",
             "te uopšte nije zakonska kategorija,"
@@ -6354,7 +6622,7 @@
         },
         {
           "index": 33,
-          "start": 140.43001,
+          "start": 140.43,
           "end": 146.27,
           "lines": [
             "ali se često spominje, pa ćemo nju",
@@ -6364,7 +6632,7 @@
         {
           "index": 34,
           "start": 146.27,
-          "end": 150.17001,
+          "end": 150.17,
           "lines": [
             "u državnim škodanima,",
             "ali nije zakonska kategorija."
@@ -6373,14 +6641,14 @@
         {
           "index": 35,
           "start": 151.11,
-          "end": 152.51001,
+          "end": 152.51,
           "lines": [
             "Da krenemo od stvari,"
           ]
         },
         {
           "index": 36,
-          "start": 152.51001,
+          "start": 152.51,
           "end": 158.61,
           "lines": [
             "ako uzmete jednog sudija",
@@ -6399,7 +6667,7 @@
         {
           "index": 38,
           "start": 163.03,
-          "end": 164.79001,
+          "end": 164.79,
           "lines": [
             "da li oni radi isti krivičanje?"
           ]
@@ -6409,9 +6677,9 @@
       "cue_stats": {
         "count": 38,
         "total_chars": 1633,
-        "mean_cps": 10.102964799897842,
-        "p95_cps": 14.999892857908367,
-        "max_cps": 17.613536286725704,
+        "mean_cps": 10.102971751590085,
+        "p95_cps": 15.000000000000243,
+        "max_cps": 17.613636363636456,
         "over_line_pct": 0.0,
         "over_lines_pct": 0.0,
         "over_dur_pct": 0.0,
@@ -6427,7 +6695,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.35,
+        "wer_folded": 0.35,
+        "cer": 0.16706875753920386,
+        "substitutions": 71,
+        "insertions": 9,
+        "deletions": 18,
+        "hits": 191,
+        "reference_words": 280,
+        "hypothesis_words": 271
+      }
     },
     {
       "cell_id": "uvod-u-pravo__arnndn__groq-turbo__large-v3__nofix",
@@ -6617,7 +6895,7 @@
         },
         {
           "index": 18,
-          "start": 89.310005,
+          "start": 89.31,
           "end": 95.87,
           "lines": [
             "E sad, tim državnim službenim",
@@ -6635,7 +6913,7 @@
         {
           "index": 20,
           "start": 101.23,
-          "end": 107.810005,
+          "end": 107.81,
           "lines": [
             "Dašem da radi neki posao",
             "i taj posao predstavljam neku nadležnju."
@@ -6643,15 +6921,15 @@
         },
         {
           "index": 21,
-          "start": 107.810005,
-          "end": 112.490005,
+          "start": 107.81,
+          "end": 112.49,
           "lines": [
             "Budim dobro što jednostavnije objasniti."
           ]
         },
         {
           "index": 22,
-          "start": 112.490005,
+          "start": 112.49,
           "end": 116.73,
           "lines": [
             "Ne da se držim tih definicijeg družbenika,"
@@ -6668,7 +6946,7 @@
         },
         {
           "index": 24,
-          "start": 119.350006,
+          "start": 119.35,
           "end": 121.41,
           "lines": [
             "Dakle, uzmeš neki posao,"
@@ -6693,7 +6971,7 @@
         },
         {
           "index": 27,
-          "start": 129.43001,
+          "start": 129.43,
           "end": 130.89,
           "lines": [
             "Uplavno tako."
@@ -6710,7 +6988,7 @@
         {
           "index": 29,
           "start": 131.87,
-          "end": 137.79001,
+          "end": 137.79,
           "lines": [
             "postoje dve vrste nadražnosti u principu",
             "i ova treća nekakva funkcionalna, te"
@@ -6718,15 +6996,15 @@
         },
         {
           "index": 30,
-          "start": 137.79001,
-          "end": 140.43001,
+          "start": 137.79,
+          "end": 140.43,
           "lines": [
             "uopšte nije zakonska kategorija,"
           ]
         },
         {
           "index": 31,
-          "start": 140.43001,
+          "start": 140.43,
           "end": 146.27,
           "lines": [
             "ali se često spominje koja ćemo nju",
@@ -6754,7 +7032,7 @@
         {
           "index": 34,
           "start": 156.63,
-          "end": 160.39001,
+          "end": 160.39,
           "lines": [
             "koji je državno spužbeno lice",
             "i jednog narodnog poslanika"
@@ -6762,7 +7040,7 @@
         },
         {
           "index": 35,
-          "start": 160.39001,
+          "start": 160.39,
           "end": 162.59,
           "lines": [
             "koji je državno spužbeno lice."
@@ -6781,8 +7059,8 @@
       "cue_stats": {
         "count": 36,
         "total_chars": 1677,
-        "mean_cps": 10.48688846700471,
-        "p95_cps": 15.159534150175157,
+        "mean_cps": 10.486884906946026,
+        "p95_cps": 15.159574468085143,
         "max_cps": 16.41791044776124,
         "over_line_pct": 0.0,
         "over_lines_pct": 0.0,
@@ -6799,7 +7077,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.3357142857142857,
+        "wer_folded": 0.3357142857142857,
+        "cer": 0.14957780458383596,
+        "substitutions": 66,
+        "insertions": 12,
+        "deletions": 16,
+        "hits": 198,
+        "reference_words": 280,
+        "hypothesis_words": 276
+      }
     },
     {
       "cell_id": "uvod-u-pravo__anlmdn__faster-whisper__large-v3__nofix",
@@ -7177,7 +7465,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.15,
+        "wer_folded": 0.15,
+        "cer": 0.07780458383594692,
+        "substitutions": 31,
+        "insertions": 6,
+        "deletions": 5,
+        "hits": 244,
+        "reference_words": 280,
+        "hypothesis_words": 281
+      }
     },
     {
       "cell_id": "uvod-u-pravo__anlmdn__groq__large-v3__nofix",
@@ -7364,7 +7662,7 @@
         {
           "index": 18,
           "start": 82.22,
-          "end": 87.70865,
+          "end": 87.709,
           "lines": [
             "Dakle, to su ljudi",
             "koji rade u imenu za račun država."
@@ -7372,16 +7670,16 @@
         },
         {
           "index": 19,
-          "start": 87.54865,
-          "end": 91.08865,
+          "start": 87.549,
+          "end": 91.089,
           "lines": [
             "E sad,"
           ]
         },
         {
           "index": 20,
-          "start": 91.08865,
-          "end": 96.60865,
+          "start": 91.089,
+          "end": 96.609,
           "lines": [
             "tim državnim službenim",
             "licima se daju određene poslove."
@@ -7389,8 +7687,8 @@
         },
         {
           "index": 21,
-          "start": 96.60865,
-          "end": 101.60865,
+          "start": 96.609,
+          "end": 101.609,
           "lines": [
             "Zato",
             "da imate određenu državnu službenu lice,"
@@ -7398,8 +7696,8 @@
         },
         {
           "index": 22,
-          "start": 101.60865,
-          "end": 106.948654,
+          "start": 101.609,
+          "end": 106.949,
           "lines": [
             "date mu da rade neki posao",
             "i taj posao predstavlja njegovu"
@@ -7407,48 +7705,48 @@
         },
         {
           "index": 23,
-          "start": 106.948654,
-          "end": 113.948654,
+          "start": 106.949,
+          "end": 113.949,
           "lines": [
             "radu. Uvod u srpskom jeziku je najprostije"
           ]
         },
         {
           "index": 24,
-          "start": 117.88866,
-          "end": 119.36865,
+          "start": 117.889,
+          "end": 119.369,
           "lines": [
             "i najbolje objasnjeno."
           ]
         },
         {
           "index": 25,
-          "start": 119.38866,
-          "end": 121.28865,
+          "start": 119.389,
+          "end": 121.289,
           "lines": [
             "Uzmeš posao,"
           ]
         },
         {
           "index": 26,
-          "start": 121.28865,
-          "end": 123.808655,
+          "start": 121.289,
+          "end": 123.809,
           "lines": [
             "daš ga jednom državnom službenom ulicu"
           ]
         },
         {
           "index": 27,
-          "start": 123.808655,
-          "end": 129.22865,
+          "start": 123.809,
+          "end": 129.229,
           "lines": [
             "i kažeš da je to tvoja nadležnost."
           ]
         },
         {
           "index": 28,
-          "start": 131.32864,
-          "end": 137.74866,
+          "start": 131.329,
+          "end": 137.749,
           "lines": [
             "Postoje dve vrste nadražnosti, u principu",
             "i ova treća nekakva funkcionalna,"
@@ -7456,16 +7754,16 @@
         },
         {
           "index": 29,
-          "start": 137.74866,
-          "end": 140.18866,
+          "start": 137.749,
+          "end": 140.189,
           "lines": [
             "to je uopšte nije zakonska kategorija,"
           ]
         },
         {
           "index": 30,
-          "start": 140.18866,
-          "end": 144.16866,
+          "start": 140.189,
+          "end": 144.169,
           "lines": [
             "ali se često spominje,",
             "pa ćemo nju objasniti,"
@@ -7473,8 +7771,8 @@
         },
         {
           "index": 31,
-          "start": 144.16866,
-          "end": 149.70865,
+          "start": 144.169,
+          "end": 149.709,
           "lines": [
             "i prisutna je naravno u radu državnih",
             "hordana, ali nije zakonska kategorija."
@@ -7482,16 +7780,16 @@
         },
         {
           "index": 32,
-          "start": 151.10864,
-          "end": 153.72865,
+          "start": 151.109,
+          "end": 153.729,
           "lines": [
             "Da krenemo od stvarne, dakle,"
           ]
         },
         {
           "index": 33,
-          "start": 153.72865,
-          "end": 158.58865,
+          "start": 153.729,
+          "end": 158.589,
           "lines": [
             "ako uzmete recimo jednog sudija",
             "koji je državno službeno lice"
@@ -7499,8 +7797,8 @@
         },
         {
           "index": 34,
-          "start": 158.58865,
-          "end": 163.16866,
+          "start": 158.589,
+          "end": 163.169,
           "lines": [
             "i jednog narodnog poslanika",
             "koji je državno službeno lice,"
@@ -7508,8 +7806,8 @@
         },
         {
           "index": 35,
-          "start": 163.16866,
-          "end": 164.42865,
+          "start": 163.169,
+          "end": 164.429,
           "lines": [
             "da li oni radi isti?"
           ]
@@ -7519,9 +7817,9 @@
       "cue_stats": {
         "count": 35,
         "total_chars": 1548,
-        "mean_cps": 10.29802285330447,
+        "mean_cps": 10.298001093751033,
         "p95_cps": 15.573770491803293,
-        "max_cps": 15.873141850331942,
+        "max_cps": 15.873015873015987,
         "over_line_pct": 0.0,
         "over_lines_pct": 0.0,
         "over_dur_pct": 0.0,
@@ -7537,7 +7835,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.26071428571428573,
+        "wer_folded": 0.26071428571428573,
+        "cer": 0.1344993968636912,
+        "substitutions": 41,
+        "insertions": 4,
+        "deletions": 28,
+        "hits": 211,
+        "reference_words": 280,
+        "hypothesis_words": 256
+      }
     },
     {
       "cell_id": "uvod-u-pravo__anlmdn__groq-turbo__large-v3__nofix",
@@ -7743,7 +8051,7 @@
         {
           "index": 20,
           "start": 83.06,
-          "end": 87.70865,
+          "end": 87.709,
           "lines": [
             "Dakle, to su ljudi",
             "koji rade u ime za računom državu."
@@ -7751,8 +8059,8 @@
         },
         {
           "index": 21,
-          "start": 89.32865,
-          "end": 95.90865,
+          "start": 89.329,
+          "end": 95.909,
           "lines": [
             "E sad, tim državnim službenim",
             "licima se daju određene poslovi."
@@ -7760,8 +8068,8 @@
         },
         {
           "index": 22,
-          "start": 96.24866,
-          "end": 101.60865,
+          "start": 96.249,
+          "end": 101.609,
           "lines": [
             "Zadrži imate određeno",
             "državno službeno lice,"
@@ -7769,8 +8077,8 @@
         },
         {
           "index": 23,
-          "start": 101.60865,
-          "end": 107.74866,
+          "start": 101.609,
+          "end": 107.749,
           "lines": [
             "dajte mu da rade neki posao i taj",
             "posao predstavlja njegovu naravljaju."
@@ -7778,8 +8086,8 @@
         },
         {
           "index": 24,
-          "start": 107.668655,
-          "end": 112.40865,
+          "start": 107.669,
+          "end": 112.409,
           "lines": [
             "Ja se kudim dakle",
             "da vam što jednostavnije objasnim."
@@ -7787,16 +8095,16 @@
         },
         {
           "index": 25,
-          "start": 112.40865,
-          "end": 116.72865,
+          "start": 112.409,
+          "end": 116.729,
           "lines": [
             "Ne da se držim tih definicija izučbenika,"
           ]
         },
         {
           "index": 26,
-          "start": 116.72865,
-          "end": 119.38866,
+          "start": 116.729,
+          "end": 119.389,
           "lines": [
             "nego najprostije je moguće",
             "da vam objasnim."
@@ -7804,16 +8112,16 @@
         },
         {
           "index": 27,
-          "start": 119.42865,
-          "end": 121.36865,
+          "start": 119.429,
+          "end": 121.369,
           "lines": [
             "Uzmeš neki posao,"
           ]
         },
         {
           "index": 28,
-          "start": 121.36865,
-          "end": 127.32865,
+          "start": 121.369,
+          "end": 127.329,
           "lines": [
             "daš ga jednom državnom služnom oblicu",
             "i dažeš evo ti na radi to."
@@ -7821,16 +8129,16 @@
         },
         {
           "index": 29,
-          "start": 127.32865,
-          "end": 129.40866,
+          "start": 127.329,
+          "end": 129.409,
           "lines": [
             "To je tvoja nadležnost."
           ]
         },
         {
           "index": 30,
-          "start": 131.32864,
-          "end": 137.66866,
+          "start": 131.329,
+          "end": 137.669,
           "lines": [
             "E sada, postoje dve vrste nadležnosti u",
             "principu i ova treća nekakva funkcionalna,"
@@ -7838,16 +8146,16 @@
         },
         {
           "index": 31,
-          "start": 137.66866,
-          "end": 140.32864,
+          "start": 137.669,
+          "end": 140.329,
           "lines": [
             "to je uopšte nije zakonska kategorija,"
           ]
         },
         {
           "index": 32,
-          "start": 140.32864,
-          "end": 144.16866,
+          "start": 140.329,
+          "end": 144.169,
           "lines": [
             "ali se često spominje,",
             "pa ćemo nju objasniti,"
@@ -7855,8 +8163,8 @@
         },
         {
           "index": 33,
-          "start": 144.16866,
-          "end": 147.46866,
+          "start": 144.169,
+          "end": 147.469,
           "lines": [
             "i prisutna je naravno",
             "u radu državnih podana,"
@@ -7864,24 +8172,24 @@
         },
         {
           "index": 34,
-          "start": 147.90866,
-          "end": 150.32864,
+          "start": 147.909,
+          "end": 150.329,
           "lines": [
             "Ali nije zakonska kategorija."
           ]
         },
         {
           "index": 35,
-          "start": 150.32864,
-          "end": 152.86865,
+          "start": 150.329,
+          "end": 152.869,
           "lines": [
             "Da krenemo od stvarne, dakle,"
           ]
         },
         {
           "index": 36,
-          "start": 152.86865,
-          "end": 158.70865,
+          "start": 152.869,
+          "end": 158.709,
           "lines": [
             "ako uzmete recimo jednog sudiju",
             "koji je državno službno novice,"
@@ -7889,8 +8197,8 @@
         },
         {
           "index": 37,
-          "start": 158.70865,
-          "end": 164.90866,
+          "start": 158.709,
+          "end": 164.909,
           "lines": [
             "jednog narodnog poslanika koji je državno",
             "službno novice, da li oni radi isti?"
@@ -7901,9 +8209,9 @@
       "cue_stats": {
         "count": 37,
         "total_chars": 1672,
-        "mean_cps": 10.685452224449593,
+        "mean_cps": 10.685430823622934,
         "p95_cps": 15.159574468085108,
-        "max_cps": 16.165352761831723,
+        "max_cps": 16.165413533834606,
         "over_line_pct": 0.0,
         "over_lines_pct": 0.0,
         "over_dur_pct": 0.0,
@@ -7919,7 +8227,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.15,
+        "wer_folded": 0.15,
+        "cer": 0.05367913148371532,
+        "substitutions": 33,
+        "insertions": 4,
+        "deletions": 5,
+        "hits": 242,
+        "reference_words": 280,
+        "hypothesis_words": 279
+      }
     },
     {
       "cell_id": "uvod-u-pravo__speech__faster-whisper__large-v3__nofix",
@@ -8299,7 +8617,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.16428571428571428,
+        "wer_folded": 0.16428571428571428,
+        "cer": 0.07297949336550061,
+        "substitutions": 29,
+        "insertions": 10,
+        "deletions": 7,
+        "hits": 244,
+        "reference_words": 280,
+        "hypothesis_words": 283
+      }
     },
     {
       "cell_id": "uvod-u-pravo__speech__groq__large-v3__nofix",
@@ -8486,8 +8814,8 @@
         },
         {
           "index": 18,
-          "start": 83.152504,
-          "end": 87.692505,
+          "start": 83.153,
+          "end": 87.693,
           "lines": [
             "To su ljudi",
             "koji rade u imenu za račun država."
@@ -8495,16 +8823,16 @@
         },
         {
           "index": 19,
-          "start": 89.2925,
-          "end": 90.9925,
+          "start": 89.292,
+          "end": 90.992,
           "lines": [
             "E sad,"
           ]
         },
         {
           "index": 20,
-          "start": 90.9925,
-          "end": 96.5725,
+          "start": 90.992,
+          "end": 96.572,
           "lines": [
             "tim državnim službenim",
             "licima se daju određene poslove."
@@ -8512,16 +8840,16 @@
         },
         {
           "index": 21,
-          "start": 96.2125,
-          "end": 101.912506,
+          "start": 96.212,
+          "end": 101.913,
           "lines": [
             "Imate potređeno državno službeno lice,"
           ]
         },
         {
           "index": 22,
-          "start": 101.912506,
-          "end": 107.7525,
+          "start": 101.913,
+          "end": 107.752,
           "lines": [
             "dašte im da rade neki posao",
             "i taj posao predstavlja njegovu radu."
@@ -8529,8 +8857,8 @@
         },
         {
           "index": 23,
-          "start": 107.7125,
-          "end": 112.3725,
+          "start": 107.712,
+          "end": 112.372,
           "lines": [
             "Budim",
             "da te o onšto jednostavnije objasnim,"
@@ -8538,16 +8866,16 @@
         },
         {
           "index": 24,
-          "start": 112.3725,
-          "end": 116.7325,
+          "start": 112.372,
+          "end": 116.732,
           "lines": [
             "ne da se držim ti definicije službenika,"
           ]
         },
         {
           "index": 25,
-          "start": 116.7325,
-          "end": 119.3725,
+          "start": 116.732,
+          "end": 119.372,
           "lines": [
             "nego najprostije je moguće",
             "da vam objasnim."
@@ -8555,8 +8883,8 @@
         },
         {
           "index": 26,
-          "start": 119.2125,
-          "end": 125.6325,
+          "start": 119.212,
+          "end": 125.632,
           "lines": [
             "Dakle, uzmeš neki posao, daže ga jednom",
             "državnom suženom u lišću i kažeš evo ti,"
@@ -8564,24 +8892,24 @@
         },
         {
           "index": 27,
-          "start": 125.6325,
-          "end": 129.6925,
+          "start": 125.632,
+          "end": 129.692,
           "lines": [
             "napravo radi to, to je tvoja nadležnost."
           ]
         },
         {
           "index": 28,
-          "start": 129.0925,
-          "end": 131.07251,
+          "start": 129.092,
+          "end": 131.073,
           "lines": [
             "Bukvalno tako."
           ]
         },
         {
           "index": 29,
-          "start": 131.07251,
-          "end": 137.6725,
+          "start": 131.073,
+          "end": 137.672,
           "lines": [
             "E sada, postoje dve vrste nadležnosti u",
             "principu i ova treća nekakva funkcionalna,"
@@ -8589,8 +8917,8 @@
         },
         {
           "index": 30,
-          "start": 137.3125,
-          "end": 142.0925,
+          "start": 137.312,
+          "end": 142.092,
           "lines": [
             "to je uopšte nije zakonska kategorija,",
             "ali se često spominje,"
@@ -8598,8 +8926,8 @@
         },
         {
           "index": 31,
-          "start": 142.0925,
-          "end": 146.79251,
+          "start": 142.092,
+          "end": 146.793,
           "lines": [
             "pa ću vam nju objasniti,",
             "i prisutna je naravno u radu državnih"
@@ -8607,24 +8935,24 @@
         },
         {
           "index": 32,
-          "start": 146.79251,
-          "end": 151.1125,
+          "start": 146.793,
+          "end": 151.112,
           "lines": [
             "ordana, Ali nije zakonska kategorija."
           ]
         },
         {
           "index": 33,
-          "start": 151.1125,
-          "end": 152.8125,
+          "start": 151.112,
+          "end": 152.812,
           "lines": [
             "Da krenemo od stvarne, dakle,"
           ]
         },
         {
           "index": 34,
-          "start": 152.8125,
-          "end": 158.7125,
+          "start": 152.812,
+          "end": 158.712,
           "lines": [
             "ako uzmete recimo jednog sudiju",
             "koji je državno službeno lice,"
@@ -8632,8 +8960,8 @@
         },
         {
           "index": 35,
-          "start": 158.7125,
-          "end": 164.4125,
+          "start": 158.712,
+          "end": 164.412,
           "lines": [
             "jednog narodnog poslanika koji je državno",
             "službeno lice, da li oni rade isti?"
@@ -8644,9 +8972,9 @@
       "cue_stats": {
         "count": 35,
         "total_chars": 1658,
-        "mean_cps": 10.251520414059463,
+        "mean_cps": 10.251470418751065,
         "p95_cps": 16.287878787878785,
-        "max_cps": 17.058823529411878,
+        "max_cps": 17.058823529411594,
         "over_line_pct": 0.0,
         "over_lines_pct": 0.0,
         "over_dur_pct": 0.0,
@@ -8662,7 +8990,17 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.20714285714285716,
+        "wer_folded": 0.20714285714285716,
+        "cer": 0.08926417370325694,
+        "substitutions": 41,
+        "insertions": 7,
+        "deletions": 10,
+        "hits": 229,
+        "reference_words": 280,
+        "hypothesis_words": 277
+      }
     },
     {
       "cell_id": "uvod-u-pravo__speech__groq-turbo__large-v3__nofix",
@@ -8860,7 +9198,7 @@
         {
           "index": 19,
           "start": 83.06,
-          "end": 88.1725,
+          "end": 88.172,
           "lines": [
             "Dakle, to su ljudi",
             "koji rade u ime za račun države."
@@ -8868,16 +9206,16 @@
         },
         {
           "index": 20,
-          "start": 88.1725,
-          "end": 90.3125,
+          "start": 88.172,
+          "end": 90.312,
           "lines": [
             "E sad,"
           ]
         },
         {
           "index": 21,
-          "start": 90.3125,
-          "end": 95.9525,
+          "start": 90.312,
+          "end": 95.952,
           "lines": [
             "tim državnim službenim licima se",
             "daju određenom prostoru."
@@ -8885,8 +9223,8 @@
         },
         {
           "index": 22,
-          "start": 96.4925,
-          "end": 101.5925,
+          "start": 96.492,
+          "end": 101.592,
           "lines": [
             "Dakle,",
             "imate potređeno državno službeno lice,"
@@ -8894,8 +9232,8 @@
         },
         {
           "index": 23,
-          "start": 101.5925,
-          "end": 107.7725,
+          "start": 101.592,
+          "end": 107.772,
           "lines": [
             "dakle da rada neki posao",
             "i taj posao predstavlja njegovu nadležnju."
@@ -8903,8 +9241,8 @@
         },
         {
           "index": 24,
-          "start": 107.652504,
-          "end": 112.3925,
+          "start": 107.653,
+          "end": 112.392,
           "lines": [
             "Ja se budim dakle",
             "da vam što jednostavnije objasnim."
@@ -8912,16 +9250,16 @@
         },
         {
           "index": 25,
-          "start": 112.3925,
-          "end": 116.7125,
+          "start": 112.392,
+          "end": 116.712,
           "lines": [
             "Ne da se držim tih definicija izučbenika,"
           ]
         },
         {
           "index": 26,
-          "start": 116.7125,
-          "end": 119.3725,
+          "start": 116.712,
+          "end": 119.372,
           "lines": [
             "nego najprostije je moguće",
             "da vam objasnim."
@@ -8929,16 +9267,16 @@
         },
         {
           "index": 27,
-          "start": 119.412506,
-          "end": 121.3525,
+          "start": 119.413,
+          "end": 121.352,
           "lines": [
             "Dakle, uzmeš neki posao,"
           ]
         },
         {
           "index": 28,
-          "start": 121.3525,
-          "end": 127.332504,
+          "start": 121.352,
+          "end": 127.333,
           "lines": [
             "daš ga jednom državnom službenom licu",
             "i kažeš evo ti na radi to,"
@@ -8946,16 +9284,16 @@
         },
         {
           "index": 29,
-          "start": 127.332504,
-          "end": 129.3725,
+          "start": 127.333,
+          "end": 129.372,
           "lines": [
             "to je tvoja nadležnost."
           ]
         },
         {
           "index": 30,
-          "start": 131.3325,
-          "end": 137.6925,
+          "start": 131.332,
+          "end": 137.692,
           "lines": [
             "E sada, postoje dve vrste nadležnosti u",
             "principu i ova treća nekakva funkcionalna,"
@@ -8963,8 +9301,8 @@
         },
         {
           "index": 31,
-          "start": 137.6925,
-          "end": 144.1725,
+          "start": 137.692,
+          "end": 144.172,
           "lines": [
             "to je uopšte nije zakonska kategorija, ali",
             "se često spominje, pa ćemo nju objasniti,"
@@ -8972,8 +9310,8 @@
         },
         {
           "index": 32,
-          "start": 144.4125,
-          "end": 150.29251,
+          "start": 144.412,
+          "end": 150.293,
           "lines": [
             "Prisutna je naravno u radu državnih",
             "hordana, ali nije zakonska kategorija."
@@ -8981,16 +9319,16 @@
         },
         {
           "index": 33,
-          "start": 150.29251,
-          "end": 152.8125,
+          "start": 150.293,
+          "end": 152.812,
           "lines": [
             "Da krenjemo od stvarne, dakle,"
           ]
         },
         {
           "index": 34,
-          "start": 152.8125,
-          "end": 158.7325,
+          "start": 152.812,
+          "end": 158.732,
           "lines": [
             "ako uzmete recimo jednog sudiju",
             "koji je državno službno nulice,"
@@ -8998,8 +9336,8 @@
         },
         {
           "index": 35,
-          "start": 158.7325,
-          "end": 164.8725,
+          "start": 158.732,
+          "end": 164.872,
           "lines": [
             "jednog narodnog poslanika koji je državno",
             "službno nulice, da li oni radi isti."
@@ -9010,8 +9348,8 @@
       "cue_stats": {
         "count": 35,
         "total_chars": 1672,
-        "mean_cps": 10.451611935662017,
-        "p95_cps": 12.962962962962926,
+        "mean_cps": 10.452066466188102,
+        "p95_cps": 12.962962962962983,
         "max_cps": 16.165413533834606,
         "over_line_pct": 0.0,
         "over_lines_pct": 0.0,
@@ -9028,7 +9366,18 @@
         "prompt_echo_text": "",
         "filler_hits": {}
       },
-      "reference_score": null
+      "reference_score": {
+        "wer": 0.2,
+        "wer_folded": 0.2,
+        "cer": 0.0850422195416164,
+        "substitutions": 39,
+        "insertions": 7,
+        "deletions": 10,
+        "hits": 231,
+        "reference_words": 280,
+        "hypothesis_words": 277
+      }
     }
-  ]
+  ],
+  "rescored_utc": "2026-08-04T17:54:38.284060+00:00"
 }

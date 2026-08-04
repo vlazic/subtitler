@@ -1,9 +1,33 @@
 {
   "clip": "uvod-u-pravo",
-  "reference": null,
-  "status": "absent",
+  "reference": "uvod-u-pravo.txt",
+  "status": "present",
   "human_verified": false,
-  "adjudicated": false,
-  "source": "",
-  "note": "No reference transcript. Reference-free metrics only; WER is not reported for this clip. Phase 8 (LLM adjudication) produces this file."
+  "adjudicated": true,
+  "method": "llm-adjudicated consensus of engine transcripts, aligned by timestamp",
+  "run": "2026-08-04T15-21-56Z",
+  "engine_cells": [
+    "uvod-u-pravo__none__faster-whisper__large-v3__nofix",
+    "uvod-u-pravo__none__groq__large-v3__nofix",
+    "uvod-u-pravo__none__groq-turbo__large-v3__nofix"
+  ],
+  "engines": [
+    "faster-whisper",
+    "groq",
+    "groq-turbo"
+  ],
+  "windows": 11,
+  "spans_flagged": 26,
+  "critic_findings": 8,
+  "critic_verdict": "This reference is usable but should not be treated as settled, and the honest parts of it make the unflagged parts more dangerous rather than less: the adjudicator demonstrably understood the transcribe-do-not-edit rule, keeping `o njegove epistemologiji`, `prema državi kao organizaciju`, `daju određene poslove` and `to je uopšte nije zakonska kategorija` in their ungrammatical spoken form, and flagged seventeen spans on uvod-u-pravo alone. That makes the four places where it silently supplied better Serbian than any engine produced look like lapses in an otherwise applied rule rather than a policy, and a reviewer will not find them by reading the flag list. The weakest clip is by far uvod-u-pravo, whose audio is poor enough that large stretches of the reference are reconstruction: `funkcionisanja države` at 00:08, `službenom licu` at 01:58 and `državnih organa` at 02:25 each replace a form that no engine produced with the word the legal context predicts, and each has a flagged twin elsewhere in the clip, so the flagging was inconsistent rather than absent. `Subordinacija je odnos` at 00:15 overrides a two-engine majority to produce a grammatical copula. Because three of these four corrections are exactly what an LLM correction pass would also do, the `--fix` axis on uvod-u-pravo is measuring partly against its own output and its margin there should be discounted until a human confirms those four spans. gozba-sample is in much better shape, with clean audio, high engine agreement, and only one real omission: groq was recorded as silent in window 6 when it had in fact emitted that clause early and two tokens shorter. The single highest-leverage action for a reviewer is not any individual span but the `Locke`/`Lok`/`Džon Lok` orthography decision the adjudicator already raised, since it moves WER on every occurrence in the clip and no amount of adjudication can settle a spelling convention.",
+  "review_queue": "benchmarks/references/review-queue.md",
+  "agent": {
+    "role": "ref-adjudicator",
+    "task_id": "adjudicate-uvod-u-pravo",
+    "attempts": 1
+  },
+  "source": "adjudicated from 3 engine transcripts in benchmarks/results/2026-08-04T15-21-56Z",
+  "words": 280,
+  "characters": 1706,
+  "note": "Consensus pseudo-reference: adjudicated from engine transcripts by an LLM that cannot hear the audio. It catches errors that are not Serbian and is blind to any error every engine made the same way. WER against it ranks engines against each other and does not establish truth. Not human-verified: resolve the flagged spans in benchmarks/references/review-queue.md against the audio before trusting it."
 }

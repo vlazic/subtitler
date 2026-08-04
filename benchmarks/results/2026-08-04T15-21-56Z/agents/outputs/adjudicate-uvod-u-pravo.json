@@ -1,0 +1,365 @@
+{
+  "role": "ref-adjudicator",
+  "clip": "uvod-u-pravo",
+  "windows": [
+    {
+      "index": 0,
+      "text": "Imamo fizičke prinude, imamo pravna pravila, to su ona pravila koja imaju uređeno funkcionisanje države i pomenuli smo dva osnovna principa funkcionisanja države koja su poznata kao subordinacija i koordinacija."
+    },
+    {
+      "index": 1,
+      "text": "Subordinacija je odnos nadređenosti i podređenosti, tu imamo državne organe na različitom stepenu vlasti."
+    },
+    {
+      "index": 2,
+      "text": "A kod koordinacije imamo isti stepen vlasti i imamo saradnju. To je ono što smo prošlog puta radili i gde smo se, jel da, zaustavili. Sada idemo dalje."
+    },
+    {
+      "index": 3,
+      "text": "Kada je reč o ljudima, krenućemo sa ljudima da vidimo koji to ljudi rade, šta rade, kako rade i kakav je njihov odnos prema državi kao organizaciju."
+    },
+    {
+      "index": 4,
+      "text": "Dakle, državu kao organizaciju ne čine svi građani, ne čini svo stanovništvo. Taj državni aparat čine samo neki ljudi. Ti ljudi"
+    },
+    {
+      "index": 5,
+      "text": "koji čine taj državni aparat, oni se nazivaju državnim službenim licima. Dakle, to su ljudi koji rade u ime i za račun države. E sad, tim državnim službenim licima se daju određene poslove."
+    },
+    {
+      "index": 6,
+      "text": "Dakle, imate određeno državno službeno lice, date mu da rade neki posao i taj posao predstavlja njegovu radnju."
+    },
+    {
+      "index": 7,
+      "text": "Ja se trudim da vam što jednostavnije objasnim, ne da se držim tih definicija iz udžbenika, nego najprostije moguće da vam objasnim. Uzmeš neki posao,"
+    },
+    {
+      "index": 8,
+      "text": "daš ga jednom državnom službenom licu i kažeš evo ti, na, radi to. To je tvoja nadležnost. E sada, postoje dve vrste nadležnosti u principu i ova treća nekakva funkcionalna,"
+    },
+    {
+      "index": 9,
+      "text": "to je uopšte nije zakonska kategorija, ali se često spominje, pa ćemo nju objasniti, i prisutna je naravno u radu državnih organa, ali nije zakonska kategorija."
+    },
+    {
+      "index": 10,
+      "text": "Da krenemo od stvarne, dakle, ako uzmete recimo jednog sudiju koji je državno službeno lice, jednog narodnog poslanika koji je državno službeno lice, da li oni rade isti?"
+    }
+  ],
+  "spans": [
+    {
+      "start": 0.0,
+      "end": 3.0,
+      "chosen": "Imamo fizičke prinude,",
+      "candidates": [
+        {"source": "faster-whisper", "text": "(nothing; the engine starts at \"Imamo pravna pravila\")"},
+        {"source": "groq", "text": "Imamo kurs kursničke primude,"},
+        {"source": "groq-turbo", "text": "Imamo prosopiske primude,"}
+      ],
+      "reason": "One engine heard no speech here at all and the other two produced non-Serbian strings that agree only on a final word resembling \"prinude\", so both the modifier and whether there is any speech are unresolved.",
+      "confidence": "low"
+    },
+    {
+      "start": 3.0,
+      "end": 8.0,
+      "chosen": "to su ona pravila koja imaju uređeno funkcionisanje države",
+      "candidates": [
+        {"source": "faster-whisper", "text": "koja su ona pravila koja imaju uređenu funkcionisane države"},
+        {"source": "groq", "text": "kursona pravila koja ima uređenu funkcionisanu državu"},
+        {"source": "groq-turbo", "text": "to su ona pravila koje imaju uređeni funkcionisani države"}
+      ],
+      "reason": "No engine produced a grammatical phrase; \"funkcionisanje države\" is the only Serbian noun that fits all three garbled forms, but \"imaju uređeno\" may instead be \"uređuju\", which would change three tokens.",
+      "confidence": "low"
+    },
+    {
+      "start": 8.0,
+      "end": 11.0,
+      "chosen": "i pomenuli smo dva osnovna principa funkcionisanja države",
+      "candidates": [
+        {"source": "faster-whisper", "text": "i pomenuli smo dva osnovna principa funkcionisane države"},
+        {"source": "groq", "text": "i pomenuli smo dva osnovna principa funkcionisanog države"},
+        {"source": "groq-turbo", "text": "i omenuli smo dva osnovna principa funkcionisani države"}
+      ],
+      "reason": "Raised by the critic: no engine produced the verbal noun \"funkcionisanja\" and the three engines each produced a different adjectival ending instead, but there is no majority reading to fall back on and none of the three is a Serbian phrase, since \"funkcionisati\" has no passive participle, so the reconstruction is kept and marked unresolved exactly like its twin five seconds earlier.",
+      "confidence": "low"
+    },
+    {
+      "start": 11.0,
+      "end": 15.0,
+      "chosen": "koja su poznata kao subordinacija i koordinacija",
+      "candidates": [
+        {"source": "faster-whisper", "text": "koja su podlana čelo subordinacija i koordinacija"},
+        {"source": "groq", "text": "koja su podlano čelo subordinacija i koordinacija"},
+        {"source": "groq-turbo", "text": "koja su pozvana čeo subordinacija i koordinacija"}
+      ],
+      "reason": "All three readings are non-words in this position; \"poznata kao\" is the nearest Serbian phrase that takes the nominative pair that follows, and groq-turbo's \"pozvana čeo\" points at it, but it is a reconstruction.",
+      "confidence": "low"
+    },
+    {
+      "start": 15.0,
+      "end": 19.0,
+      "chosen": "Subordinacija je odnos nadređenosti i podređenosti,",
+      "candidates": [
+        {"source": "faster-whisper", "text": "Subordinacija je odnos nadređenosti i podređenosti"},
+        {"source": "groq", "text": "Subordinacija i odnos nadređenosti i podređenosti"},
+        {"source": "groq-turbo", "text": "Subordinacija i odnos nadređenosti i podređenosti"}
+      ],
+      "reason": "Raised by the critic: two engines heard \"i\" in the copula slot, which leaves the sentence without a predicate, and the single-engine \"je\" was taken because the definition that follows requires one, so a two-to-one majority was overridden on one unstressed syllable.",
+      "confidence": "low"
+    },
+    {
+      "start": 19.0,
+      "end": 24.0,
+      "chosen": "tu imamo državne organe na različitom stepenu vlasti",
+      "candidates": [
+        {"source": "faster-whisper", "text": "koju imamo državno dajem na različitom stepenu vlasti"},
+        {"source": "groq", "text": "koju imamo državno dajem na različitom stepenu vlasti"},
+        {"source": "groq-turbo", "text": "tu imamo državne grane na različitom stepenu vlasti"}
+      ],
+      "reason": "The majority \"koju imamo državno dajem\" is not Serbian, so the minority reading wins on \"tu imamo\" and \"grane\" is read as the legal term \"organe\", but the connective could equally be \"gde\".",
+      "confidence": "medium"
+    },
+    {
+      "start": 30.0,
+      "end": 34.0,
+      "chosen": "i imamo saradnju",
+      "candidates": [
+        {"source": "faster-whisper", "text": "i imamo sarari"},
+        {"source": "groq", "text": "i saraje"},
+        {"source": "groq-turbo", "text": "i imamo saradit"}
+      ],
+      "reason": "No engine produced a word; all three begin \"sara-\" and \"saradnju\" is what the coordination/subordination contrast calls for, but the exact form is a guess.",
+      "confidence": "medium"
+    },
+    {
+      "start": 35.0,
+      "end": 40.0,
+      "chosen": "i gde smo se, jel da, zaustavili",
+      "candidates": [
+        {"source": "faster-whisper", "text": "i gde smo se, jel da, zaustavili"},
+        {"source": "groq", "text": "i gde smo se zaustavili"},
+        {"source": "groq-turbo", "text": "i gdje smo sve zaustavili"}
+      ],
+      "reason": "Only one engine transcribes the filler, but groq-turbo's stray \"sve\" in the same slot suggests something was there; kept because fillers belong in a verbatim reference, though it may be an insertion.",
+      "confidence": "low"
+    },
+    {
+      "start": 45.0,
+      "end": 46.0,
+      "chosen": "Kada je reč o ljudima,",
+      "candidates": [
+        {"source": "faster-whisper", "text": "Dakle, kada je reč o ljudima,"},
+        {"source": "groq", "text": "Kada je reč o ljudima? (emitted at the end of window 2)"},
+        {"source": "groq-turbo", "text": "Kada je reč o ljudima,"}
+      ],
+      "reason": "Raised by the critic: a one-engine \"Dakle\" was dropped here on the two-engine majority, which is the same kind of decision that was flagged elsewhere in the clip, so it is recorded now rather than left silent.",
+      "confidence": "low"
+    },
+    {
+      "start": 46.0,
+      "end": 49.0,
+      "chosen": "krenućemo sa ljudima",
+      "candidates": [
+        {"source": "faster-whisper", "text": "premaćemo sa ljudima"},
+        {"source": "groq", "text": "Krenut ćemo sa ljudima"},
+        {"source": "groq-turbo", "text": "krenut ćemo sa ljudima"}
+      ],
+      "reason": "The speaker is consistently ekavian Serbian, which contracts this future to one word, so the two-engine \"krenut ćemo\" is treated as an orthographic split rather than what was said; this changes the token count.",
+      "confidence": "medium"
+    },
+    {
+      "start": 64.0,
+      "end": 67.0,
+      "chosen": "ne čini svo stanovništvo.",
+      "candidates": [
+        {"source": "faster-whisper", "text": "ne čini svostavni liško"},
+        {"source": "groq", "text": "ne čini svo stanovništvo"},
+        {"source": "groq-turbo", "text": "ne čini svojstavništvo"}
+      ],
+      "reason": "Raised by the critic: only one engine produced real words and the other two garbled a shorter shape, so the single-engine reading was taken over a garbled majority and the split is recorded here.",
+      "confidence": "low"
+    },
+    {
+      "start": 67.0,
+      "end": 69.0,
+      "chosen": "Taj državni aparat čine samo neki ljudi.",
+      "candidates": [
+        {"source": "faster-whisper", "text": "Znači taj državni aparat čine samo neke ljudi"},
+        {"source": "groq", "text": "taj državni aparat čine samo neki ljudi"},
+        {"source": "groq-turbo", "text": "Taj državni aparat čine samo neki ljudi"}
+      ],
+      "reason": "Raised by the critic: the one-engine \"Znači\" was dropped on the two-engine majority, and faster-whisper's \"neke ljudi\" likewise lost to the two engines with \"neki ljudi\"; both decisions are majority-based but were not recorded before.",
+      "confidence": "low"
+    },
+    {
+      "start": 78.0,
+      "end": 83.0,
+      "chosen": "koji rade u ime i za račun države",
+      "candidates": [
+        {"source": "faster-whisper", "text": "koji rade u imenu za računom državu"},
+        {"source": "groq", "text": "koji rade u imenu za račun država"},
+        {"source": "groq-turbo", "text": "koji rade u ime za računom državu"}
+      ],
+      "reason": "\"u ime i za račun\" is a fixed legal formula and each engine garbles a different part of it, but no engine heard the conjunction, so the inserted \"i\" is my reconstruction.",
+      "confidence": "medium"
+    },
+    {
+      "start": 90.0,
+      "end": 92.0,
+      "chosen": "Dakle,",
+      "candidates": [
+        {"source": "faster-whisper", "text": "Dakle,"},
+        {"source": "groq", "text": "Zato da"},
+        {"source": "groq-turbo", "text": "Zadrži"}
+      ],
+      "reason": "Three mutually incompatible openers for the same one or two syllables; the only Serbian discourse marker among them was taken, and the speaker uses it elsewhere in the clip.",
+      "confidence": "low"
+    },
+    {
+      "start": 92.0,
+      "end": 95.0,
+      "chosen": "imate određeno državno službeno lice",
+      "candidates": [
+        {"source": "faster-whisper", "text": "imate potređenu državnu službenu lice"},
+        {"source": "groq", "text": "imate određenu državnu službenu lice"},
+        {"source": "groq-turbo", "text": "imate određeno državno službeno lice"}
+      ],
+      "reason": "Two engines produce feminine agreement in front of the neuter noun \"lice\", which is not Serbian; the minority neuter reading was taken, at the risk of hiding a real agreement slip by the speaker.",
+      "confidence": "medium"
+    },
+    {
+      "start": 103.0,
+      "end": 106.0,
+      "chosen": "predstavlja njegovu radnju",
+      "candidates": [
+        {"source": "faster-whisper", "text": "predstavlja njegovu radu"},
+        {"source": "groq", "text": "predstavlja njegovu | radu."},
+        {"source": "groq-turbo", "text": "predstavlja njegovu naravljaju"}
+      ],
+      "reason": "The majority \"njegovu radu\" is not a Serbian form, and the alternative the topic suggests is \"njegovu nadležnost\", which is defined a few seconds later; \"radnju\" was chosen as the nearest real word to what was heard.",
+      "confidence": "low"
+    },
+    {
+      "start": 105.0,
+      "end": 108.0,
+      "chosen": "Ja se trudim da vam što jednostavnije objasnim",
+      "candidates": [
+        {"source": "faster-whisper", "text": "Ja se obudim da vam što jednostavnije objasnim"},
+        {"source": "groq", "text": "(nothing; the engine drops this sentence)"},
+        {"source": "groq-turbo", "text": "Ja se kudim dakle da vam što jednostavnije objasnim"}
+      ],
+      "reason": "Neither engine produced a real verb and groq-turbo also has a \"dakle\" that faster-whisper lacks, so both the verb and the presence of the discourse marker are unresolved.",
+      "confidence": "medium"
+    },
+    {
+      "start": 110.0,
+      "end": 114.0,
+      "chosen": "ne da se držim tih definicija iz udžbenika",
+      "candidates": [
+        {"source": "faster-whisper", "text": "ne da se držim ti definicije službenika"},
+        {"source": "groq", "text": "(nothing; the engine hallucinates unrelated text here)"},
+        {"source": "groq-turbo", "text": "ne da se držim tih definicija izučbenika"}
+      ],
+      "reason": "Both readings are plausible in a law lecture, \"definicija službenika\" and \"definicija iz udžbenika\"; the latter fits the contrast with \"nego najprostije moguće da vam objasnim\", but this is a genuine two-way split.",
+      "confidence": "medium"
+    },
+    {
+      "start": 114.0,
+      "end": 117.0,
+      "chosen": "nego najprostije moguće da vam objasnim.",
+      "candidates": [
+        {"source": "faster-whisper", "text": "nego najprostije moguće da vam objasnim"},
+        {"source": "groq", "text": "(nothing; the engine hallucinates unrelated text here)"},
+        {"source": "groq-turbo", "text": "nego najprostije je moguće da vam objasnim"}
+      ],
+      "reason": "Raised by the critic: the two usable engines split one to one on a clitic \"je\" that changes the word count, and the shorter reading was taken with no reason recorded.",
+      "confidence": "low"
+    },
+    {
+      "start": 117.0,
+      "end": 118.0,
+      "chosen": "Uzmeš neki posao,",
+      "candidates": [
+        {"source": "faster-whisper", "text": "Dakle, uzmeš neki posao,"},
+        {"source": "groq", "text": "Uzmeš posao,"},
+        {"source": "groq-turbo", "text": "Uzmeš neki posao,"}
+      ],
+      "reason": "Raised by the critic together with the drop at 00:45: a second one-engine \"Dakle\" was dropped here on the majority, and groq additionally lacks \"neki\", so both the marker and that adjective are unresolved.",
+      "confidence": "low"
+    },
+    {
+      "start": 118.0,
+      "end": 120.5,
+      "chosen": "daš ga jednom državnom službenom licu",
+      "candidates": [
+        {"source": "faster-whisper", "text": "daš ga jednom državnom tvornom ulicu"},
+        {"source": "groq", "text": "daš ga jednom državnom službenom ulicu"},
+        {"source": "groq-turbo", "text": "daš ga jednom državnom služnom oblicu"}
+      ],
+      "reason": "Raised by the critic: no engine produced \"licu\" and the majority shape is \"ulicu\", which is not Serbian after \"službenom\" and would mean \"street\", so the dative of the clip's own recurring term \"državno službeno lice\" was kept as the only Serbian reading, but the whole phrase is reconstruction.",
+      "confidence": "low"
+    },
+    {
+      "start": 120.0,
+      "end": 124.0,
+      "chosen": "i kažeš evo ti, na, radi to",
+      "candidates": [
+        {"source": "faster-whisper", "text": "i kažeš evo ti, | napravo radi to"},
+        {"source": "groq", "text": "i kažeš da je to tvoja nadležnost (quoted speech dropped)"},
+        {"source": "groq-turbo", "text": "i dažeš evo ti na radi to"}
+      ],
+      "reason": "The quoted imperative is transcribed differently by each engine and dropped entirely by one; the reconstruction of the particle between \"evo ti\" and \"radi to\" is uncertain.",
+      "confidence": "low"
+    },
+    {
+      "start": 124.0,
+      "end": 127.0,
+      "chosen": "(omitted: \"bukvalno tako\")",
+      "candidates": [
+        {"source": "faster-whisper", "text": "to je tvoja nadležnost, bukvalno tako. E sada,"},
+        {"source": "groq", "text": "to je tvoja nadležnost. Postoje dve vrste"},
+        {"source": "groq-turbo", "text": "To je tvoja nadležnost. E sada, postoje"}
+      ],
+      "reason": "Only faster-whisper has \"bukvalno tako\", and groq-turbo transcribes this stretch densely with no gap for it, so it was dropped as a probable insertion, which costs two tokens if it was really said.",
+      "confidence": "low"
+    },
+    {
+      "start": 144.0,
+      "end": 147.0,
+      "chosen": "i prisutna je naravno u radu državnih organa",
+      "candidates": [
+        {"source": "faster-whisper", "text": "u radu državnih ordana"},
+        {"source": "groq", "text": "u radu državnih hordana"},
+        {"source": "groq-turbo", "text": "u radu državnih podana"}
+      ],
+      "reason": "Raised by the critic: no engine produced \"organa\", but none of \"ordana\", \"hordana\" and \"podana\" is a Serbian word either and there is no majority among them, so the legal term the whole clip is about was kept and is recorded here as reconstruction.",
+      "confidence": "low"
+    },
+    {
+      "start": 155.0,
+      "end": 159.0,
+      "chosen": "jednog sudiju",
+      "candidates": [
+        {"source": "faster-whisper", "text": "jednog sudija"},
+        {"source": "groq", "text": "jednog sudija"},
+        {"source": "groq-turbo", "text": "jednog sudiju"}
+      ],
+      "reason": "The majority accusative \"jednog sudija\" is not Serbian, so the single engine with the real form was preferred, but the speaker could have slipped.",
+      "confidence": "medium"
+    },
+    {
+      "start": 163.0,
+      "end": 165.0,
+      "chosen": "da li oni rade isti?",
+      "candidates": [
+        {"source": "faster-whisper", "text": "da li oni rade isti?"},
+        {"source": "groq", "text": "da li oni radi isti?"},
+        {"source": "groq-turbo", "text": "da li oni radi isti?"}
+      ],
+      "reason": "\"oni radi\" is not Serbian but the difference is one unstressed final vowel at the very end of the clip, where the sentence is also cut off mid-phrase (probably \"isti posao\").",
+      "confidence": "medium"
+    }
+  ],
+  "notes": "This is a post-critique revision: all eight ref-critic findings for this clip were addressed by flagging and none by reverting, because in every case the disputed reference wording either appears verbatim in an engine output (\"Subordinacija je odnos\" at 00:15, \"svo stanovništvo\" at 01:04, \"najprostije moguće\" at 01:54, and the majority-backed drops of \"Znači\" at 01:07 and of \"Dakle\" at 00:45 and 01:57) or is the only Serbian form available where no engine produced one and no majority exists among their garbles (\"funkcionisanja države\" at 00:08, \"službenom licu\" at 01:58, \"državnih organa\" at 02:24); those nine new spans all carry confidence \"low\" and no window text was changed. Consensus pseudo-reference only: I cannot hear the audio, so any error all three engines made identically is invisible here and is reproduced in this file. Verbatim readings deliberately kept uncorrected, do not \"fix\" them: \"prema državi kao organizaciju\" (all three engines, wrong case), \"tim državnim službenim licima se daju određene poslove\", \"date mu da rade neki posao\" (singular subject, plural verb), \"to je uopšte nije zakonska kategorija\" (unanimous, redundant subject), and the truncated final \"da li oni rade isti?\". Window placement: text drifted across boundaries between engines and I followed the two-engine majority each time, so \"A kod koordinacije imamo isti stepen vlasti\" sits in window 2 (faster-whisper put it in 1), \"Kada je reč o ljudima\" in window 3 (groq put it in 2), \"E sad, tim državnim službenim licima...\" in window 5 (groq put it in 6), and \"daš ga jednom državnom službenom licu...\" in window 8 (faster-whisper put it in 7). groq drops or hallucinates whole stretches in windows 5 to 8 (\"Uvod u srpskom jeziku je najprostije i najbolje objasnjeno\" is not speech), so its silence there is not evidence against a reading. Diacritics are complete throughout."
+}

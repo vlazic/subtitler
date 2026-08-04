@@ -5,30 +5,32 @@
 - clips: fixtures/gozba-sample.mp3, fixtures/uvod-u-pravo.m4a
 - denoisers: none
 - engines: faster-whisper, groq, groq-turbo (large-v3, device cuda)
+- metrics recomputed from the kept transcripts: `2026-08-04T17:54:38.033441+00:00`
 
 ## What this run cannot answer
 
-- **No reference transcript for gozba-sample, uvod-u-pravo.** WER, CER and the error decomposition are therefore not reported for those clips: this run measures shape, speed and hallucination signals only. Phase 8 (LLM adjudication of reference transcripts) is what fills that gap; nothing here invents one.
-- **The leaderboard below is ordered by realtime factor, not by quality.** Speed is not accuracy. Nothing in this run ranks transcription quality.
+- **The reference for gozba-sample, uvod-u-pravo is not human-verified.** Every WER derived from it is marked `*` and is provisional: an unverified reference measures agreement between models, not correctness.
+- **`gozba-sample` is a consensus pseudo-reference, not ground truth.** It was adjudicated from 3 engine transcripts (`faster-whisper`, `groq`, `groq-turbo`) by an LLM that cannot hear the audio. It works at the text level with Serbian language knowledge, which catches a reading that is not Serbian and is **blind to any error every engine made the same way**. So the WER column below ranks these engines against each other; it does not measure how much of the speech each one got right. 9 span(s) are flagged as uncertain and 1 more are disputed by the adversarial reviewer: `benchmarks/references/review-queue.md` lists them with timestamps, for the human pass that would make this reference real.
+- **`uvod-u-pravo` is a consensus pseudo-reference, not ground truth.** It was adjudicated from 3 engine transcripts (`faster-whisper`, `groq`, `groq-turbo`) by an LLM that cannot hear the audio. It works at the text level with Serbian language knowledge, which catches a reading that is not Serbian and is **blind to any error every engine made the same way**. So the WER column below ranks these engines against each other; it does not measure how much of the speech each one got right. 26 span(s) are flagged as uncertain and 8 more are disputed by the adversarial reviewer: `benchmarks/references/review-queue.md` lists them with timestamps, for the human pass that would make this reference real.
 
-## Leaderboard (by speed: no reference exists)
+## Leaderboard
 
 `RTF` is decode time over audio duration and comes from the transcript, so it is the engine's own speed. `wall s` and `peak MB` are the whole cell in its own process, and the `cached` column is what it did **not** have to do: a cell that reused a cached transcript never loaded a model, and its wall clock and peak memory are not comparable with a cell that did.
 
 | # | clip | denoise | engine | fix | WER % | WER folded % | CER % | sub/ins/del | RTF | wall s | peak MB | cached |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | uvod-u-pravo | none | groq-turbo | no | n/a | n/a | n/a | n/a | 0.006 | 1.2 | 52 | extract |
-| 2 | uvod-u-pravo | none | groq-turbo | yes | n/a | n/a | n/a | n/a | 0.006 | 11.3 | 200 | extract,transcribe,cues |
-| 3 | uvod-u-pravo | none | groq | no | n/a | n/a | n/a | n/a | 0.012 | 2.3 | 52 | extract |
-| 4 | uvod-u-pravo | none | groq | yes | n/a | n/a | n/a | n/a | 0.012 | 12.2 | 200 | extract,transcribe,cues |
-| 5 | gozba-sample | none | groq-turbo | no | n/a | n/a | n/a | n/a | 0.014 | 1.8 | 49 | extract |
-| 6 | gozba-sample | none | groq-turbo | yes | n/a | n/a | n/a | n/a | 0.014 | 9.6 | 199 | extract,transcribe,cues |
-| 7 | gozba-sample | none | groq | no | n/a | n/a | n/a | n/a | 0.016 | 1.9 | 49 | extract |
-| 8 | gozba-sample | none | groq | yes | n/a | n/a | n/a | n/a | 0.016 | 8.0 | 200 | extract,transcribe,cues |
-| 9 | gozba-sample | none | faster-whisper | no | n/a | n/a | n/a | n/a | 0.044 | 7.9 | 3386 | extract |
-| 10 | gozba-sample | none | faster-whisper | yes | n/a | n/a | n/a | n/a | 0.044 | 10.7 | 251 | extract,transcribe,cues |
-| 11 | uvod-u-pravo | none | faster-whisper | no | n/a | n/a | n/a | n/a | 0.046 | 10.8 | 3386 | extract |
-| 12 | uvod-u-pravo | none | faster-whisper | yes | n/a | n/a | n/a | n/a | 0.046 | 10.8 | 231 | extract,transcribe,cues |
+| 1 | gozba-sample | none | faster-whisper | no | 0.7* | 0.7* | 0.2 | 1/0/0 | 0.044 | 7.9 | 3386 | extract |
+| 2 | gozba-sample | none | groq-turbo | no | 3.3* | 3.3* | 0.7 | 4/0/1 | 0.014 | 1.8 | 49 | extract |
+| 3 | gozba-sample | none | faster-whisper | yes | 5.2* | 5.2* | 1.2 | 7/1/0 | 0.044 | 10.7 | 251 | extract,transcribe,cues |
+| 4 | gozba-sample | none | groq-turbo | yes | 5.2* | 5.2* | 1.1 | 7/0/1 | 0.014 | 9.6 | 199 | extract,transcribe,cues |
+| 5 | uvod-u-pravo | none | groq-turbo | yes | 7.9* | 7.9* | 3.7 | 16/1/5 | 0.006 | 11.3 | 200 | extract,transcribe,cues |
+| 6 | uvod-u-pravo | none | faster-whisper | yes | 12.9* | 12.9* | 7.5 | 25/5/6 | 0.046 | 10.8 | 231 | extract,transcribe,cues |
+| 7 | uvod-u-pravo | none | faster-whisper | no | 14.6* | 14.6* | 7.7 | 31/5/5 | 0.046 | 10.8 | 3386 | extract |
+| 8 | uvod-u-pravo | none | groq-turbo | no | 15.4* | 15.4* | 5.4 | 34/4/5 | 0.006 | 1.2 | 52 | extract |
+| 9 | uvod-u-pravo | none | groq | yes | 23.9* | 23.9* | 12.9 | 34/5/28 | 0.012 | 12.2 | 200 | extract,transcribe,cues |
+| 10 | uvod-u-pravo | none | groq | no | 26.1* | 26.1* | 13.4 | 41/4/28 | 0.012 | 2.3 | 52 | extract |
+| 11 | gozba-sample | none | groq | no | 29.4* | 29.4* | 26.0 | 4/1/40 | 0.016 | 1.9 | 49 | extract |
+| 12 | gozba-sample | none | groq | yes | 30.7* | 30.7* | 26.3 | 5/1/41 | 0.016 | 8.0 | 200 | extract,transcribe,cues |
 
 ## Cue shape and hallucination signals
 

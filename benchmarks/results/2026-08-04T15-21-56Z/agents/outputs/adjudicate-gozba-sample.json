@@ -1,0 +1,142 @@
+{
+  "role": "ref-adjudicator",
+  "clip": "gozba-sample",
+  "windows": [
+    {
+      "index": 0,
+      "text": "Misao Lokove filozofije, ukratko izraženo, sastoji se u ovome. Da se opšta predstava, da se ono što je istinito,"
+    },
+    {
+      "index": 1,
+      "text": "to jest, da se saznanje zasniva na iskustvu. Propisuje se kao put saznanja s jedne strane iskustvo i posmatranje, a s druge strane analiziranje i isticanje opštih odredava."
+    },
+    {
+      "index": 2,
+      "text": "To je empirizam koji metafizicira i to predstavlja uobičajeni put u naukama. Ovim Hegelovim rečima o Lokovoj filozofiji,"
+    },
+    {
+      "index": 3,
+      "text": "koja je napisao u svojoj istoriji filozofije, započinjemo današnju emisiju."
+    },
+    {
+      "index": 4,
+      "text": "Poštovani slušalci, u današnjoj emisiji razgovaramo sa Mašanom Bogdanovskim, docentom na Filozofskom fakultetu u Beogradu. Dobrodošli na gozbu. Hvala."
+    },
+    {
+      "index": 5,
+      "text": "Razgovaramo o filozofiji Johna Locke, o njegove epistemologiji, ali i o epistemologiji religije. Ali recite nam pre svega toga, zašto je uopšte John Locke značajan za istoriju filozofije,"
+    },
+    {
+      "index": 6,
+      "text": "odnosno kako biste vi odredili taj značaj? Svakako da najveći značaj leži u tome da je Locke začetnik modernog empirizma, empirizma onako kako ga nalazimo u britanskoj školi, a tog filozofska."
+    }
+  ],
+  "spans": [
+    {
+      "start": 15.0,
+      "end": 30.0,
+      "chosen": "isticanje opštih odredava",
+      "candidates": [
+        {"source": "faster-whisper", "text": "isticanje opštih odredava"},
+        {"source": "groq", "text": "isticanje opštih odredova"},
+        {"source": "groq-turbo", "text": "isticanje opštih odredava"}
+      ],
+      "reason": "Reverted to the two-engine majority `odredava`; the earlier reference had `odredaba`, the standard genitive plural of `odredba`, which no engine produced and which is not the only Serbian possibility (`odredbi` is equally standard), so it was a reconstruction that would have marked all three raw engines wrong.",
+      "confidence": "low"
+    },
+    {
+      "start": 45.0,
+      "end": 60.0,
+      "chosen": "koja je napisao u svojoj istoriji filozofije",
+      "candidates": [
+        {"source": "faster-whisper", "text": "koja je napisao u svojoj istoriji filozofije"},
+        {"source": "groq", "text": "koja je napisao u svojoj istoriji filozofije"},
+        {"source": "groq-turbo", "text": "koje je napisao u svojoj istoriji filozofije"}
+      ],
+      "reason": "The antecedent is `Ovim Hegelovim rečima`, so `koje` is the grammatical form, but two engines heard the ungrammatical `koja` and engines seldom invent an agreement error, so the majority reading is kept under the transcribe-do-not-edit rule; only the audio settles it.",
+      "confidence": "medium"
+    },
+    {
+      "start": 60.0,
+      "end": 75.0,
+      "chosen": "Mašanom Bogdanovskim",
+      "candidates": [
+        {"source": "faster-whisper", "text": "Mašanom Bogdanovskim"},
+        {"source": "groq", "text": "Mašanom Bogdanovskim"},
+        {"source": "groq-turbo", "text": "Mašanom Bogdanovskim"}
+      ],
+      "reason": "All three engines agree and the name fits the stated role, but a proper noun that every engine could have misheard the same way is exactly the error class this adjudication is blind to, so the spelling should be confirmed against the audio.",
+      "confidence": "medium"
+    },
+    {
+      "start": 60.0,
+      "end": 75.0,
+      "chosen": "Dobrodošli na gozbu. Hvala.",
+      "candidates": [
+        {"source": "faster-whisper", "text": "Dobrodošli na gozbu. Hvala."},
+        {"source": "groq", "text": "Dobrodošli na gozbu. Hvala. Hvala."},
+        {"source": "groq-turbo", "text": "Dobrodošli na gozbu. Hvala."}
+      ],
+      "reason": "Two engines heard one `Hvala` and one heard it twice; a guest repeating the thanks is entirely plausible, so the majority was taken but the repetition cannot be ruled out from the text alone.",
+      "confidence": "low"
+    },
+    {
+      "start": 75.0,
+      "end": 90.0,
+      "chosen": "o filozofiji Johna Locke ... zašto je uopšte John Locke značajan",
+      "candidates": [
+        {"source": "faster-whisper", "text": "o filozofiji Johna Locke ... zašto je uopšte John Locke značajan"},
+        {"source": "groq", "text": "o filozofiji Johna Locke (rest of window missing)"},
+        {"source": "groq-turbo", "text": "o filozofiji Johna Locke ... zašto je uopšte John Locke značajan"}
+      ],
+      "reason": "All engines render the name in English orthography while the speaker is plainly declining it in Serbian elsewhere in the clip (`Lokove`, `Lokovoj`), so the reference could equally be `Džona Loka` / `Džon Lok`; the choice of orthography moves WER on every occurrence and should be settled by a human once for the whole clip.",
+      "confidence": "medium"
+    },
+    {
+      "start": 90.0,
+      "end": 93.0,
+      "chosen": "odnosno kako biste vi odredili taj značaj?",
+      "candidates": [
+        {"source": "faster-whisper", "text": "odnosno kako biste vi odredili taj značaj?"},
+        {"source": "groq", "text": "Kako bi ste odredili taj značaj? (emitted one window early, at the end of window 5)"},
+        {"source": "groq-turbo", "text": "odnosno kako biste vi odredili taj značaj?"}
+      ],
+      "reason": "Flagged after critique: groq is not silent on this clause but emits it a window early and two tokens shorter, without `odnosno` and without `vi`, so the two-engine majority was kept but the presence of those two tokens is a real disagreement that only the audio settles.",
+      "confidence": "low"
+    },
+    {
+      "start": 90.0,
+      "end": 105.0,
+      "chosen": "da je Locke začetnik modernog empirizma",
+      "candidates": [
+        {"source": "faster-whisper", "text": "da je Locke začetnik modernog empirizma"},
+        {"source": "groq-turbo", "text": "da je Lok začetnik modernog empirizma"}
+      ],
+      "reason": "One-to-one split between the English and the Serbianized spelling of the same surname with groq silent here; `Locke` was chosen only to stay consistent with the unanimous spelling in window 5, not because the text favours it.",
+      "confidence": "low"
+    },
+    {
+      "start": 90.0,
+      "end": 105.0,
+      "chosen": "empirizma onako kako ga nalazimo u britanskoj školi",
+      "candidates": [
+        {"source": "faster-whisper", "text": "empirizma onako kakvog ga nalazimo u britanskoj školi"},
+        {"source": "groq-turbo", "text": "empirizma onako kako ga nalazimo u britanskoj školi"}
+      ],
+      "reason": "One-to-one split; `onako kako ga nalazimo` is idiomatic while `onako kakvog ga nalazimo` mixes two constructions, but the speaker may well have said the mixed form and only the audio distinguishes them.",
+      "confidence": "low"
+    },
+    {
+      "start": 90.0,
+      "end": 105.0,
+      "chosen": "a tog filozofska",
+      "candidates": [
+        {"source": "faster-whisper", "text": "a tog filozofska"},
+        {"source": "groq-turbo", "text": "tog filozofske"}
+      ],
+      "reason": "The clip is cut off mid-phrase and neither reading is coherent Serbian (both are consistent with something like `a to je filozofska ...`), so faster-whisper's longer reading was kept verbatim rather than reconstructed.",
+      "confidence": "low"
+    }
+  ],
+  "notes": "Consensus pseudo-reference built from text alone; it ranks the three engines against each other and does not establish what the audio contains. Deliberately left uncorrected because all three engines agree on them: `o njegove epistemologiji` (window 5, should be `o njegovoj`) and `koja je napisao` (window 3). Do not grammar-correct either one. Window assignment: groq placed `Poštovani slušalci,` at the end of window 3 while the other two placed it at the start of window 4; the majority placement was used. Engine coverage: groq skipped from `o epistemologiji religije` straight to `Kako bi ste odredili taj značaj?` in window 5 and produced nothing at all in window 6, so windows 5 and 6 rest on faster-whisper and groq-turbo only, which is why several one-to-one ties there are flagged. The John Locke orthography decision (English `John Locke` / `Locke` vs Serbianized `Džon Lok` / `Lok`) is the single highest-impact open question in this clip and affects four tokens. This is a post-critique revision: the reconstruction `opštih odredaba` in window 1, which no engine produced, was reverted to the two-engine majority `odredava` and left flagged, while the critic's one finding for this clip, `odnosno kako biste vi odredili taj značaj?` at 01:30, was kept as the two-engine majority and newly flagged at low confidence against groq's shorter early reading; no other window was touched."
+}

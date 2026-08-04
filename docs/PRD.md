@@ -64,6 +64,13 @@ Each is a test, not an aspiration.
    `groq/whisper-large-v3-turbo` on the same clips. If it does not, the default flips to
    whatever wins and this document is amended with the number. The 15% figure is a target,
    not a prediction: there is no credible published Serbian `large-v3` number to anchor on.
+
+   **Provisionally met, 2026-08-04.** Local `large-v3` scores 0.7% and 14.6% WER on the two
+   fixtures against 3.3% and 15.4% for `groq/whisper-large-v3-turbo`, 9.7% against 11.1%
+   pooled. Both bars cleared, so the default does not change. Provisional because the
+   references are LLM-adjudicated consensus of those same engines and are not human-verified:
+   44 spans are queued in `benchmarks/references/review-queue.md`, and an engine that agrees
+   with the consensus is scored against a text partly derived from its own output.
 5. **Faster than real time on a Mac.** A 10-minute video completes end to end on an
    M-series Mac with RTF < 1.0.
 6. **Re-runs are free and byte-identical.** Running the same command twice hits the stage
@@ -121,3 +128,11 @@ for audio-only input instead of a flat colour.
    it need recording first?
 4. Does `--fix` improve WER or hurt it? An LLM that "corrects" grammar changes words the
    speaker actually said. Measured as its own axis; no assumption either way.
+
+   **Answered provisionally, 2026-08-04: both, and which one depends on the transcript.** On
+   the clean clip it made all three engines worse (0.7 to 5.2, 3.3 to 5.2, 29.4 to 30.7); on
+   the noisy lecture it made all three better (14.6 to 12.9, 15.4 to 7.9, 26.1 to 23.9). It
+   stays off by default. The gains are the weaker half of the finding: the reference is
+   itself LLM-adjudicated, so the correction pass and the adjudicator can agree on a wording
+   neither of them heard. Re-answer this against a human-verified reference before acting
+   on it.
