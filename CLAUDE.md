@@ -6,8 +6,11 @@ primary target**, Linux is the development platform.
 ## Start here
 
 1. `docs/PRD.md` for what this is and what "done" means.
-2. `docs/architecture.md` for the pipeline stages and the data model.
-3. `docs/prior-art.md` for what was salvaged from `gozba2`, what was dropped, and the list
+2. `docs/architecture.md` for the pipeline stages, the cache key chain and the data model.
+3. `docs/STATUS.md` for where the project actually stands: the current state, the findings
+   that cost real time, and the outstanding work as a checklist. Read it before starting
+   anything, and update it when you finish.
+4. `docs/prior-art.md` for what was salvaged from `gozba2`, what was dropped, and the list
    of bugs that were fixed on the way. Do not reintroduce them.
 
 ## Non-negotiables

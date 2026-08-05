@@ -689,6 +689,13 @@ job, not CI's.
 This table is updated only when CI or a human actually runs it there. Nothing is listed as
 working because it ought to.
 
+## Contributing
+
+Start with `docs/STATUS.md`: it holds the current state, the findings that cost real time
+and must not be relearned, and the outstanding work as a checklist. `docs/architecture.md`
+covers the pipeline stages, the cache key chain and the data model, and `CLAUDE.md` lists
+the non-negotiables. Run `make test && make lint` before committing.
+
 ## License
 
 MIT. Bundled Noto Sans is SIL OFL 1.1 (see `subtitler/assets/fonts/`). The bundled RNNoise
