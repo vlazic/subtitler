@@ -156,6 +156,13 @@ ffmpeg-generated music-only clips.
       applied by all three engines. What the gate removes is named in the run's warnings,
       and a run left with no cues warns and writes an empty `.srt` rather than raising. See
       finding 12 for why the obvious signals did not work.
+- [ ] **The speech-free gate's word-rate term can misfire on genuinely sparse audio.**
+      Known and accepted rather than undiscovered. A long recording that is mostly silence
+      (say five minutes of talking in an hour) runs below the 0.5 words-per-second floor,
+      so a real `Hvala.` in it that scores under 0.95 confidence would be dropped. Narrow,
+      because it needs all three conjuncts at once, and never silent: the run names the
+      exact text and timestamp it removed. Worth revisiting if it is ever actually seen,
+      probably by measuring the rate over speech spans rather than over wall-clock.
 - [ ] **CLI `--review` is a dead end.** `RunResult.to_dict` omits `cues_key`, so a CLI user
       who stops at review cannot learn the `base_key` needed to write `edits.json` without
       reading `cues.meta.json` by hand. The flag reads as general in `--help`.
