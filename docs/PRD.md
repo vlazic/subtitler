@@ -80,7 +80,8 @@ Each is a test, not an aspiration.
    pooled. Both bars cleared, so the default does not change. Provisional because the
    references are LLM-adjudicated consensus of those same engines and are not human-verified:
    44 spans are queued in `benchmarks/references/review-queue.md`, and an engine that agrees
-   with the consensus is scored against a text partly derived from its own output.
+   with the consensus is scored against a text partly derived from its own output. Settling
+   that queue is what `subtitler bench review` is for, and it has not been done yet.
 5. **Faster than real time on a Mac.** A 10-minute video completes end to end on an
    M-series Mac with RTF < 1.0.
 6. **Re-runs are free and byte-identical.** Running the same command twice hits the stage

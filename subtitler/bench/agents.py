@@ -896,11 +896,15 @@ def review_table(
         + "Each row is a place where the engines disagreed and an LLM that cannot hear the "
         "audio had to choose, or where the critic thinks that choice was wrong.",
         "",
-        "**Until every row is resolved, `human_verified` stays `false` in every "
-        "`*.meta.json`, and every WER in the benchmark report is marked provisional.** "
-        "To resolve a row: open the clip at the timestamp, listen, and correct the line in "
-        "`benchmarks/references/<clip>.txt` if the chosen reading is wrong. When the list is "
-        "clear, set `human_verified: true` and re-run `subtitler bench report <run>`.",
+        "**Until every row for a clip is resolved, that clip's `human_verified` stays "
+        "`false` in its `meta.json`, and every WER derived from it is marked provisional.** "
+        "Work through them with `subtitler bench review` (add `--clip <clip>` for one clip "
+        "at a time): it plays each span, takes one keypress, writes the corrections into "
+        "`benchmarks/references/<clip>.txt`, saves after every answer so it can be resumed, "
+        "and raises `human_verified` for a clip once nothing of its own is left open. Then "
+        "`subtitler bench report <run>` rescores from the saved transcripts. Editing the "
+        "reference and the flag by hand does the same thing without recording what was "
+        "heard, so it is not the supported path.",
         "",
         "| clip | time | candidate readings | chosen | why | flagged by |",
         "|---|---|---|---|---|---|",

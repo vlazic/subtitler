@@ -12,6 +12,7 @@ Five modules, in dependency order:
 | `metrics` | WER, WER_folded, CER, cue shape, hallucination heuristics |
 | `report` | a payload dict in, `report.md` out. Pure, and jiwer-free |
 | `agents` | the reference-adjudication manifest, its schemas and its merge. No model client |
+| `review` | the human pass over a reference: the only thing that raises `human_verified` |
 | `run` | the denoiser x engine x clip matrix, one process per cell |
 
 `run` is imported lazily by the CLI: it pulls in the whole pipeline, and `subtitler --help`

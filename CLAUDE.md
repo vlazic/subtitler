@@ -57,7 +57,7 @@ primary target**, Linux is the development platform.
 | `subtitler/gui/` | both UIs: `forms` (pure), `files`, `jobs`, `session` shared; `window` native, `app`+`server`+`static` browser |
 | `subtitler/launcher.py` | `install-app`: the `.app` bundle and the `.desktop` entry |
 | `subtitler/icon.py` | the icon, drawn and encoded as PNG and ICNS in pure Python |
-| `subtitler/bench/` | benchmark matrix, Serbian normalization, metrics, report, reference adjudication |
+| `subtitler/bench/` | benchmark matrix, Serbian normalization, metrics, report, reference adjudication, and `review`: the human pass over the spans it flagged |
 
 ## Gotchas that cost time before
 
@@ -170,9 +170,13 @@ primary target**, Linux is the development platform.
   output, and an error every engine made identically is invisible to it and to any number
   derived from it. `bench.agents` writes that caveat into each `meta.json`, `report.py`
   prints it above the leaderboard, and every WER carries `*` while `human_verified` is false.
-  Do not quote a number from that table without the qualifier, and do not raise
-  `human_verified` without working through `benchmarks/references/review-queue.md` with the
-  audio. `--fix` cells and prompt-echoing cells never vote in an adjudication, for the same
-  reason: the first would make the reference agree with the correction pass under test.
+  Do not quote a number from that table without the qualifier, and **do not raise
+  `human_verified` by hand.** `subtitler bench review` is the supported way: it merges the 44
+  rows of `benchmarks/references/review-queue.md` into ~35 stops, plays each span, writes the
+  answer into `benchmarks/references/<clip>.txt`, saves after every answer so it is
+  resumable, and flips the flag per clip only once that clip has no unresolved span left.
+  Nothing in the queue has been settled yet. `--fix` cells and prompt-echoing cells never
+  vote in an adjudication, for the same reason: the first would make the reference agree with
+  the correction pass under test.
 - `<b>` and `<i>` are markup, not width. `cues.display_len` is what `lint` measures, so
   `--fix-markup html` does not report violations on lines that read fine.

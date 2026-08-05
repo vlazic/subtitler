@@ -23,7 +23,7 @@ what was salvaged from `gozba2`, what was dropped, and the bugs fixed on the way
 Every WER number above is provisional. See section 3 and the caveat in `CLAUDE.md`: the
 reference transcripts are an LLM-adjudicated consensus of the very engines they score, and
 carry `*` until `benchmarks/references/review-queue.md` has been worked through with the
-audio.
+audio, which is what `subtitler bench review` exists for and has not been done yet.
 
 **What it does.** Takes an audio file, a video file, or a URL. Optionally trims to a
 window. Optionally denoises. Transcribes locally (mlx on Apple Silicon, faster-whisper
@@ -51,6 +51,7 @@ Phases 0 through 8 plus a CUDA phase, each verified by running rather than by as
 | 6b | **CUDA on the 3090.** 17x sequential, 51x batched. `doctor` GPU checks |
 | 7 | Benchmark harness: matrix runner, Serbian normalization, WER/CER/WER_folded, hallucination heuristics |
 | 8 | LLM-adjudicated reference transcripts plus an adversarial critic, then real WER numbers |
+| 8b | `subtitler bench review`: the interactive human pass over the flagged spans. Tooling only, the listening has not happened |
 | extra | Browser GUI, URL fetch via yt-dlp, review-and-edit step, native desktop window, `install-app` |
 
 The last row was **not requested**. See section 6.
@@ -119,11 +120,23 @@ ffmpeg-generated music-only clips.
 
 ### 4.1 Needs the maintainer, cannot be delegated
 
-- [ ] **Resolve the 44 spans in `benchmarks/references/review-queue.md`.** Roughly twenty
-      minutes with the audio. This is the single highest-value item: it flips
-      `human_verified` to `true` and turns **every WER number in the project** from
-      provisional into real, retroactively, for every run already recorded (`subtitler
-      bench report` rescores from saved transcripts without re-transcribing).
+- [ ] **Resolve the 44 spans in `benchmarks/references/review-queue.md`.** Still the single
+      highest-value item, and still the one thing here that a model cannot do: it needs a
+      speaker of the language listening to the audio. **The tooling now exists.** `subtitler
+      bench review [RUN]` (default: the latest run) merges the 44 rows into 35 stops, prints
+      the candidate readings and the reason for each, plays the span through ffplay with a
+      1.5 s lead-in, and takes one answer (a key, then Enter): accept, pick an engine's
+      reading, edit, replay, skip, or save and quit. Raw single-key input was deliberately
+      not used: it needs terminal mode changes that vary by terminal and cannot be tested
+      headlessly. It writes into `benchmarks/references/<clip>.txt` and saves
+      after every answer, so it is **resumable** and a half-hour is not a prerequisite for
+      starting. It **verifies per clip**, so `subtitler bench review --clip gozba-sample
+      --by <name>` is 9 stops on clean audio and about five minutes on its own, and flips
+      that clip's `human_verified` without waiting on `uvod-u-pravo`'s 26. Every flip turns
+      **that clip's WER numbers** from provisional into real, retroactively, for every run
+      already recorded (`subtitler bench report` rescores from saved transcripts without
+      re-transcribing). Nothing has been listened to yet: `human_verified` is `false` in
+      both `meta.json` files and every number in this document still carries its caveat.
 - [ ] **Phase 9: put it in the friend's hands on a real Mac.** CI proves the mac path runs.
       It cannot prove the Tk window opens rather than hangs, and it cannot prove he can use
       it. Have him run `make setup`, `subtitler install-app`, then double-click.

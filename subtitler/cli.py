@@ -260,8 +260,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_convert.add_argument("-o", "--out", required=True)
 
     p_bench = sub.add_parser("bench", help="engine and denoiser quality matrix")
-    p_bench.add_argument("action", choices=["run", "report", "agents"])
-    p_bench.add_argument("target", nargs="?", help="run directory, for report and agents")
+    p_bench.add_argument("action", choices=["run", "report", "agents", "review"])
+    p_bench.add_argument("target", nargs="?", help="run directory, for report, agents and review")
     p_bench.add_argument(
         "--clips",
         default=None,
@@ -309,6 +309,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="invalidate the shared stage cache from a stage onwards",
     )
     p_bench.add_argument("--allow-dirty", action="store_true")
+    p_bench.add_argument(
+        "--clip",
+        default=None,
+        metavar="CLIP_ID",
+        help="for `review`: work through one clip only, by id. Default: every flagged clip",
+    )
+    p_bench.add_argument(
+        "--by",
+        default="",
+        metavar="NAME",
+        help="for `review`: recorded as `verified_by` in the reference's meta.json",
+    )
+    p_bench.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="for `review`: walk the queue and decide nothing on disk",
+    )
 
     return parser
 
@@ -715,6 +732,27 @@ def _cmd_bench(args: argparse.Namespace) -> int:
         log(f"wrote {path}: {len(manifest['tasks'])} task(s)")
         log("run each task's prompt, then: subtitler bench agents <run> --merge")
         print(path)
+        return 0
+
+    if args.action == "review":
+        # The human pass over an adjudicated reference. It is the only thing that can raise
+        # `human_verified`, and it is the only stage of this package that needs a person.
+        from subtitler.bench import review as bench_review
+
+        target = Path(args.target) if args.target else bench.latest_run(out_root)
+        if target is None:
+            print(f"no benchmark runs under {out_root}", file=sys.stderr)
+            return 1
+        summary = bench_review.review(
+            target,
+            references=references,
+            clip=args.clip,
+            root=root,
+            dry_run=args.dry_run,
+            verified_by=args.by,
+            log=log,
+        )
+        print(json.dumps(summary.to_dict(), ensure_ascii=False, indent=2))
         return 0
 
     if args.action == "report":
