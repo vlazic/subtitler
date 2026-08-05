@@ -27,6 +27,7 @@ from subtitler.engines.base import (
     TranscribeOptions,
     collapse_repetition,
     drop_silent_segments,
+    drop_speechless_segments,
     prompt_echoed,
 )
 from subtitler.model import Segment, Transcript, Word
@@ -165,11 +166,17 @@ class MlxWhisperEngine:
                 )
             )
 
-        kept = drop_silent_segments(tuple(segments), audio)
+        quiet_dropped = drop_silent_segments(tuple(segments), audio)
+        # mlx-whisper reports no duration of its own, so the last kept segment is the best
+        # estimate available. It is the denominator of the word-rate term, and reading it
+        # off the audio that survived the silence gate is the conservative direction: it
+        # can only ever make the rate look higher, never lower.
+        duration = float(quiet_dropped[-1].end if quiet_dropped else 0.0)
+        kept, speechless = drop_speechless_segments(quiet_dropped, duration=duration)
 
         return Transcript(
             language=raw.get("language") or opts.language,
-            duration=float(kept[-1].end if kept else 0.0),
+            duration=duration,
             segments=kept,
             engine=self.name,
             model=self.spec.name,
@@ -181,7 +188,8 @@ class MlxWhisperEngine:
                 "seed": opts.seed,
                 "passed_kwargs": sorted(kwargs),
                 "repetition_collapsed": collapsed,
-                "silence_dropped": len(segments) - len(kept),
+                "silence_dropped": len(segments) - len(quiet_dropped),
+                "speechless_dropped": speechless,
             },
         )
 

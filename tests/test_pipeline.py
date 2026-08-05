@@ -320,6 +320,82 @@ class TestPromptEchoIsReported:
         assert result.warnings == []
 
 
+class TestSpeechFreeIsReported:
+    """Regression: speech-free audio produced confident hallucination.
+
+    Ten seconds of a YouTube clip holding titles and music returned `Hvala što pratite
+    kanal.` and the run reported one cue and no warning. The gate in `engines/base.py` now
+    removes such a segment; this is the other half, which is that removing it must not be
+    the new way to be silent. A user handed an empty `.srt` cannot otherwise tell "no speech
+    in the audio" from "the pipeline broke".
+    """
+
+    def test_a_run_left_with_no_cues_warns_and_still_writes_the_files(
+        self, tmp_path, fakes, monkeypatch
+    ):
+        """A warning and an empty file, not an exception: a 353-episode batch must not
+        abort because one episode turned out to be music."""
+        engine, _ = fakes
+        lines: list[str] = []
+
+        def nothing(audio, opts):
+            return Transcript(
+                language="sr", duration=10.0, segments=(), engine="fake", model="fake-1"
+            )
+
+        monkeypatch.setattr(engine, "transcribe", nothing)
+        result = run_pipeline(cfg(tmp_path, srt_only=True), log=lines.append)
+
+        assert result.cues == ()
+        assert result.srt is not None and result.srt.exists(), "an empty srt is still written"
+        assert result.warnings, "an empty result must never be a silent one"
+        assert "no subtitles were produced" in result.warnings[-1]
+        assert any(line.startswith("warning:") for line in lines)
+        assert result.to_dict()["warnings"] == result.warnings
+
+    def test_dropped_segments_are_named_not_merely_counted(self, tmp_path, fakes, monkeypatch):
+        """The engine has no log channel, so it records what it removed in the transcript's
+        params and the pipeline reads it back. The user is told which text went."""
+        engine, _ = fakes
+        real = engine.transcribe
+
+        def with_drop(audio, opts):
+            transcript = real(audio, opts)
+            transcript.params["speechless_dropped"] = [
+                "[0.0s] 'Hvala što pratite kanal.': known non-speech filler"
+            ]
+            return transcript
+
+        monkeypatch.setattr(engine, "transcribe", with_drop)
+        result = run_pipeline(cfg(tmp_path, srt_only=True), log=lambda _m: None)
+
+        assert result.warnings
+        assert "Hvala što pratite kanal." in result.warnings[0]
+        assert "held no speech" in result.warnings[0]
+
+    def test_a_cached_transcript_still_reports_what_was_dropped(self, tmp_path, fakes, monkeypatch):
+        engine, _ = fakes
+        real = engine.transcribe
+
+        def with_drop(audio, opts):
+            transcript = real(audio, opts)
+            transcript.params["speechless_dropped"] = [
+                "[0.0s] 'Hvala.': the model reports no speech"
+            ]
+            return transcript
+
+        monkeypatch.setattr(engine, "transcribe", with_drop)
+        first = run_pipeline(cfg(tmp_path, srt_only=True), log=lambda _m: None)
+        second = run_pipeline(cfg(tmp_path, srt_only=True), log=lambda _m: None)
+
+        assert "transcribe" in second.cached
+        assert first.warnings == second.warnings
+
+    def test_ordinary_speech_warns_about_nothing(self, tmp_path, fakes):
+        result = run_pipeline(cfg(tmp_path, srt_only=True), log=lambda _m: None)
+        assert result.warnings == []
+
+
 class TestFixStage:
     """`--fix` as a pipeline stage: cached, chained, and unable to move a timestamp.
 

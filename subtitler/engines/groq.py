@@ -20,6 +20,7 @@ from subtitler.engines.base import (
     ModelInfo,
     TranscribeOptions,
     collapse_repetition,
+    drop_speechless_segments,
 )
 from subtitler.model import Segment, Transcript, Word
 
@@ -220,10 +221,19 @@ def parse_verbose_json(
             )
         )
 
+    duration = float(raw.get("duration") or (segments[-1].end if segments else 0.0))
+    # The cloud path gets the speech-free gate even though it never gets the silence gate:
+    # the silence gate needs the WAV, which a saved response does not come with, while this
+    # one reads only what the response itself reports. Groq returns `no_speech_prob` per
+    # segment but word timings with no probabilities at all, so its text can only ever be
+    # removed by the model's own no-speech head; the two tests that need a confidence
+    # abstain rather than guess. See `base.is_speechless`.
+    kept, speechless = drop_speechless_segments(tuple(segments), duration=duration)
+
     return Transcript(
         language=raw.get("language") or opts.language,
-        duration=float(raw.get("duration") or (segments[-1].end if segments else 0.0)),
-        segments=tuple(segments),
+        duration=duration,
+        segments=kept,
         engine=engine,
         model=model,
         model_revision="hosted",
@@ -237,6 +247,7 @@ def parse_verbose_json(
             # None rather than 0: "not measured" and "measured, none" are different facts
             # and the benchmark keeps them apart.
             "silence_dropped": None,
+            "speechless_dropped": speechless,
         },
     )
 

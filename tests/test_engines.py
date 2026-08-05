@@ -24,6 +24,8 @@ from subtitler.engines.base import (
     SILENT_PEAK_DBFS,
     TranscribeOptions,
     drop_silent_segments,
+    drop_speechless_segments,
+    mean_word_confidence,
     peak_dbfs,
 )
 from subtitler.engines.faster import (
@@ -33,7 +35,7 @@ from subtitler.engines.faster import (
     preload_cuda_libraries,
 )
 from subtitler.engines.mlx import MlxWhisperEngine, _supported_kwargs
-from subtitler.model import Segment
+from subtitler.model import Segment, Word
 
 
 class TestDefaultOrder:
@@ -168,6 +170,127 @@ class TestSilenceGate:
     def test_zero_length_span(self, tmp_path) -> None:
         path = write_wav(tmp_path / "a.wav", [(1.0, 20000)])
         assert peak_dbfs(path, 0.5, 0.5) == -float("inf")
+
+
+def spoken(start: float, end: float, text: str, *, prob: float, no_speech: float = 0.05) -> Segment:
+    """A segment carrying a flat per-word confidence, which is what the gate reads."""
+    tokens = text.split()
+    step = (end - start) / max(len(tokens), 1)
+    return Segment(
+        start=start,
+        end=end,
+        text=text,
+        words=tuple(
+            Word(start=start + i * step, end=start + (i + 1) * step, text=t, prob=prob)
+            for i, t in enumerate(tokens)
+        ),
+        no_speech_prob=no_speech,
+    )
+
+
+class TestSpeechFreeGate:
+    """Regression: speech-free audio produced confident hallucination.
+
+    The first 10 seconds of a YouTube clip, titles and music and no speech at all, came back
+    as the single cue `Hvala što pratite kanal.` with nothing said about it. The -60 dBFS
+    silence gate cannot catch it because music is loud, and neither can `no_speech_prob` or
+    word confidence on their own: measured on this material the hallucination scores
+    `no_speech_prob` 0.14 and mean word confidence 0.80, while genuine speech in the
+    project's own fixtures reaches 0.436 and drops to 0.779. The numbers below are those
+    measurements, not invented ones.
+    """
+
+    def test_the_youtube_music_hallucination_is_dropped(self) -> None:
+        """The named bug, with its measured values: confident, low no-speech, still wrong."""
+        segments = (spoken(0.0, 0.46, "Hvala što pratite kanal.", prob=0.80, no_speech=0.14),)
+        kept, reasons = drop_speechless_segments(segments, duration=10.0)
+        assert kept == ()
+        assert len(reasons) == 1
+        assert "hvala" in reasons[0]
+
+    def test_the_genuine_hvala_in_gozba_sample_survives(self) -> None:
+        """`fixtures/gozba-sample.mp3` really does contain someone saying "Hvala.".
+
+        It scores 1.000, the highest confidence in the whole corpus, and it sits in a
+        109-second transcript running at 1.40 words per second. Both facts are what keep it,
+        and this test is what stops the gate from costing the fixture one of its 20 cues.
+        """
+        segments = (
+            spoken(6.5, 20.2, "Misao lokove filozofije, ukratko izraženo", prob=0.96),
+            spoken(72.0, 73.0, "Dobrodošli na gozbu.", prob=0.935, no_speech=0.067),
+            spoken(73.3, 74.0, "Hvala.", prob=1.0, no_speech=0.067),
+            spoken(75.9, 83.5, "Razgovaramo o filozofiji Johna Locke", prob=0.984),
+        )
+        kept, reasons = drop_speechless_segments(segments, duration=109.0)
+        assert kept == segments
+        assert reasons == []
+
+    def test_the_worst_real_speech_in_the_fixtures_survives(self) -> None:
+        """`uvod-u-pravo.m4a` reaches no_speech_prob 0.436 and mean confidence 0.779.
+
+        Every threshold in the gate has to clear these, or the fix costs more than the bug.
+        """
+        segments = (
+            spoken(
+                0.6, 19.6, "Imamo pravna pravila koja su ona pravila", prob=0.779, no_speech=0.012
+            ),
+            spoken(
+                95.6,
+                107.5,
+                "Dakle, imate potređenu državnu službenu lice",
+                prob=0.865,
+                no_speech=0.436,
+            ),
+        )
+        kept, _ = drop_speechless_segments(segments, duration=164.5)
+        assert kept == segments
+
+    def test_the_no_speech_head_is_believed_when_it_fires(self) -> None:
+        segments = (spoken(0.0, 5.0, "Svičnava.", prob=0.96, no_speech=0.94),)
+        kept, reasons = drop_speechless_segments(segments, duration=10.0)
+        assert kept == ()
+        assert "no_speech_prob" in reasons[0]
+
+    def test_words_carrying_no_confidence_are_dropped(self) -> None:
+        """A weak model over noise emits tokens it cannot justify (measured: 0.004 to 0.219)."""
+        segments = (spoken(1.0, 2.0, "...", prob=0.02, no_speech=0.1),)
+        kept, reasons = drop_speechless_segments(segments, duration=10.0)
+        assert kept == ()
+        assert "confidence" in reasons[0]
+
+    def test_filler_inside_a_real_transcript_is_kept(self) -> None:
+        """The word-rate term is what tells one filler cue apart from a filler transcript."""
+        segments = (
+            spoken(0.0, 10.0, "Danas govorimo o filozofiji i o mnogim drugim stvarima", prob=0.9),
+            spoken(10.0, 11.0, "Hvala.", prob=0.88),
+        )
+        kept, reasons = drop_speechless_segments(segments, duration=11.0)
+        assert kept == segments
+        assert reasons == []
+
+    def test_an_engine_supplying_neither_signal_keeps_its_text(self) -> None:
+        """Absence of evidence is not evidence. A silent drop on a missing field is exactly
+        the failure this gate exists to prevent, so nothing is removed without a reason."""
+        segments = (Segment(start=0.0, end=1.0, text="Hvala što pratite kanal."),)
+        kept, reasons = drop_speechless_segments(segments, duration=10.0)
+        assert kept == segments
+        assert reasons == []
+
+    def test_unknown_duration_disables_the_word_rate_test(self) -> None:
+        """Zero means "not measured", and a rate is not guessed from a missing denominator."""
+        segments = (spoken(0.0, 0.46, "Hvala što pratite kanal.", prob=0.80, no_speech=0.14),)
+        kept, _ = drop_speechless_segments(segments, duration=0.0)
+        assert kept == segments
+
+    def test_mean_word_confidence_ignores_words_that_carry_none(self) -> None:
+        seg = Segment(
+            start=0.0,
+            end=1.0,
+            text="a b",
+            words=(Word(0.0, 0.5, "a", 0.8), Word(0.5, 1.0, "b", None)),
+        )
+        assert mean_word_confidence(seg) == pytest.approx(0.8)
+        assert mean_word_confidence(Segment(start=0.0, end=1.0, text="a")) is None
 
 
 class TestPromptEchoRetry:

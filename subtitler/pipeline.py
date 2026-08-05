@@ -287,6 +287,7 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
 
     transcript, transcribe_key = _transcribe(cfg, cache, engine, opts, audio_wav, audio_key, log)
     warnings = _prompt_echo_warnings(transcript, opts, log)
+    warnings += _speechless_warnings(transcript, log)
     cues, cues_key = _cues(cfg, cache, transcript, transcribe_key, log)
 
     fix_report: dict[str, Any] | None = None
@@ -301,6 +302,7 @@ def run_pipeline(cfg: RunConfig, *, log: Any = print) -> RunResult:
     srt_path = render.write_srt(out_dir / f"{stem}.srt", cues)
     vtt_path = render.write_vtt(out_dir / f"{stem}.vtt", cues)
     log(f"wrote: {srt_path.name}, {vtt_path.name} ({len(cues)} cues)")
+    warnings += _no_cues_warning(cues, transcript, log)
 
     problems = lint_cues(cues, cfg.cues)
     if problems:
@@ -620,6 +622,57 @@ def _prompt_echo_warnings(transcript: Transcript, opts: TranscribeOptions, log: 
     for note in notes:
         log(f"warning: {note}")
     return notes
+
+
+def _speechless_warnings(transcript: Transcript, log: Any) -> list[str]:
+    """Say so when the speech-free gate removed text, and name what it removed.
+
+    A shorter transcript must never be a silent one. The gate exists because Whisper
+    invents confident text over music and titles (`engines/base.is_speechless`), and a user
+    who is handed subtitles with a line quietly missing has no way to tell that from a
+    recogniser that simply did not hear it. Read out of `params` rather than recomputed, so
+    a run served from the cache reports exactly what the cold run did.
+    """
+    dropped = transcript.params.get("speechless_dropped") or []
+    if not dropped:
+        return []
+    notes = [
+        f"{len(dropped)} segment(s) held no speech and were removed from the subtitles. "
+        "Whisper invents text over music, titles and applause, so this is usually right; "
+        "check the audio if you expected words there. Removed: " + "; ".join(dropped)
+    ]
+    for note in notes:
+        log(f"warning: {note}")
+    return notes
+
+
+def _no_cues_warning(cues: tuple[Cue, ...], transcript: Transcript, log: Any) -> list[str]:
+    """Say so when the run produced nothing, rather than handing back an empty file.
+
+    A warning and an empty `.srt`, deliberately, rather than an error. Two reasons. The
+    secondary user story is a 353-episode batch, and raising here would abort the whole
+    run over one episode that happens to be music; and an empty subtitle file is a valid
+    one, so writing it keeps the render contract and the stage cache consistent with every
+    other run. What must not happen is that it goes unremarked: an empty `.srt` looks
+    identical whether the clip held no speech or the pipeline broke, and the difference is
+    the entire question the user has. So it lands in the log, in `RunResult.warnings`, and
+    in `--json`.
+    """
+    if cues:
+        return []
+    dropped = len(transcript.params.get("speechless_dropped") or [])
+    why = (
+        "every segment the recogniser produced was rejected as speech-free"
+        if dropped
+        else "the recogniser found no speech in it"
+    )
+    note = (
+        f"no subtitles were produced: {why}. The .srt and .vtt were written and are empty. "
+        "If you expected words here, check that the audio actually contains speech, and "
+        "that --start/--end select the part that does"
+    )
+    log(f"warning: {note}")
+    return [note]
 
 
 def _cues(

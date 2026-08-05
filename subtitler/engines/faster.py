@@ -22,6 +22,7 @@ from subtitler.engines.base import (
     TranscribeOptions,
     collapse_repetition,
     drop_silent_segments,
+    drop_speechless_segments,
     prompt_echoed,
 )
 from subtitler.model import Segment, Transcript, Word
@@ -431,12 +432,16 @@ class FasterWhisperEngine:
             )
         runtime = time.monotonic() - started
 
-        kept = drop_silent_segments(tuple(segments), audio)
+        quiet_dropped = drop_silent_segments(tuple(segments), audio)
+        duration = float(
+            getattr(info, "duration", 0.0) or (quiet_dropped[-1].end if quiet_dropped else 0.0)
+        )
+        kept, speechless = drop_speechless_segments(quiet_dropped, duration=duration)
         device, compute_type = self.resolve_device()
 
         return Transcript(
             language=getattr(info, "language", None) or opts.language,
-            duration=float(getattr(info, "duration", 0.0) or (kept[-1].end if kept else 0.0)),
+            duration=duration,
             segments=kept,
             engine=self.name,
             model=self.spec.name,
@@ -457,7 +462,10 @@ class FasterWhisperEngine:
                 "cuda_fallback": self._fallback_reason,
                 "seed": opts.seed,
                 "repetition_collapsed": collapsed,
-                "silence_dropped": len(segments) - len(kept),
+                "silence_dropped": len(segments) - len(quiet_dropped),
+                # Carried in params, like `prompt_echo_retry`, because the pipeline reads
+                # this back out of `transcript.json` so a cached run warns about it too.
+                "speechless_dropped": speechless,
             },
         )
 
